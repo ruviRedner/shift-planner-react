@@ -1,8 +1,13 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getJewishDayInfo,
   getJewishWeekInfo,
 } from "./jewishCalendar";
+
+import { Alert, App as AntApp, Badge, Button, Card, Checkbox, DatePicker, Empty, Flex, Form, Input, Layout, Modal, Space, Table, Tag, Typography } from "antd";
+import type { TableColumnsType } from "antd";
+import { CalendarOutlined, CopyOutlined, DeleteOutlined, LeftOutlined, PlusOutlined, PrinterOutlined, RightOutlined, TeamOutlined, UndoOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 
 const STORAGE_KEY = "shift-planner-data-v1";
 
@@ -169,8 +174,9 @@ function App() {
   const [dialogStaffName, setDialogStaffName] = useState("");
   const [editing, setEditing] = useState<EditingShift | null>(null);
   const [draftIds, setDraftIds] = useState<string[]>([]);
-  const [toast, setToast] = useState("");
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const { message, modal } = AntApp.useApp();
+  function setToast(text: string) { void message.success(text); }
+  const [staffSearch, setStaffSearch] = useState("");
 
   const periodStart = useMemo(() => parseDate(data.currentStart), [data.currentStart]);
   const periodEnd = useMemo(() => addDays(periodStart, 13), [periodStart]);
@@ -180,6 +186,13 @@ function App() {
     () => new Map(data.staff.map((member) => [member.id, member])),
     [data.staff],
   );
+  const shiftCounts = [0, 1].map((weekIndex) =>
+    DAYS.reduce((count, _, dayIndex) => count + getShiftsForDay(dayIndex).filter(
+      (shift) => (period.assignments[assignmentKey(weekIndex, dayIndex, shift)] ?? []).some((id) => staffById.has(id)),
+    ).length, 0),
+  );
+  const totalShifts = DAYS.reduce((count, _, index) => count + getShiftsForDay(index).length, 0) * 2;
+  const visibleStaff = data.staff.filter((member) => member.name.includes(staffSearch.trim()));
 
   useEffect(() => {
     setSaveState("saving");
@@ -195,19 +208,6 @@ function App() {
     return () => window.clearTimeout(timeoutId);
   }, [data]);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    if (editing && !dialog.open) dialog.showModal();
-    if (!editing && dialog.open) dialog.close();
-  }, [editing]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timeoutId = window.setTimeout(() => setToast(""), 2600);
-    return () => window.clearTimeout(timeoutId);
-  }, [toast]);
 
   function updateCurrentPeriod(updater: (current: Period) => Period) {
     setData((current) => {
@@ -236,8 +236,7 @@ function App() {
     return { id: member.id, isNew: true };
   }
 
-  function handleAddStaff(event: FormEvent) {
-    event.preventDefault();
+  function handleAddStaff() {
     const result = addStaff(newStaffName);
     if (!result) return;
 
@@ -245,8 +244,7 @@ function App() {
     setToast(result.isNew ? "איש הצוות נוסף" : "השם כבר קיים ברשימה");
   }
 
-  function handleDialogAddStaff(event: FormEvent) {
-    event.preventDefault();
+  function handleDialogAddStaff() {
     const result = addStaff(dialogStaffName);
     if (!result) return;
 
@@ -257,7 +255,7 @@ function App() {
     setToast(result.isNew ? "השם נוסף ונבחר" : "השם הקיים נבחר");
   }
 
-  function removeStaff(member: StaffMember) {
+  async function removeStaff(member: StaffMember) {
     const isAssigned = Object.values(data.periods).some((savedPeriod) =>
       Object.values(savedPeriod.assignments).some((ids) => ids.includes(member.id)),
     );
@@ -265,7 +263,7 @@ function App() {
       ? `להסיר את ${member.name}? השם יימחק גם מכל המשמרות שבהן שובץ.`
       : `להסיר את ${member.name} מרשימת הצוות?`;
 
-    if (!window.confirm(message)) return;
+    if (!await modal.confirm({ title: "הסרת איש צוות", content: message, okText: "הסר", cancelText: "ביטול", okButtonProps: { danger: true } })) return;
 
     setData((current) => {
       const periods = Object.fromEntries(
@@ -289,6 +287,7 @@ function App() {
   }
 
   function openAssignment(weekIndex: number, dayIndex: number, shiftType: ShiftType) {
+    setStaffSearch("");
     setDraftIds(getAssignmentIds(weekIndex, dayIndex, shiftType));
     setDialogStaffName("");
     setEditing({ weekIndex, dayIndex, shiftType });
@@ -350,13 +349,13 @@ function App() {
     return period.assignments[currentKey] ?? [];
   }
 
-  function copyFirstWeek() {
+  async function copyFirstWeek() {
     const targetHasAssignments = Object.keys(period.assignments).some((key) =>
       key.startsWith("1:"),
     );
     if (
       targetHasAssignments &&
-      !window.confirm("בשבוע השני כבר יש שיבוצים. להחליף אותם בשיבוצי השבוע הראשון?")
+      !await modal.confirm({ title: "העתקת שיבוצים", content: "בשבוע השני כבר יש שיבוצים. להחליף אותם בשיבוצי השבוע הראשון?", okText: "העתק", cancelText: "ביטול" })
     ) {
       return;
     }
@@ -393,8 +392,8 @@ function App() {
     setToast("ההעתקה בוטלה ושיבוצי השבוע השני שוחזרו");
   }
 
-  function clearCurrentPeriod() {
-    if (!window.confirm("לנקות את כל השיבוצים וההערות בתקופה הנוכחית?")) return;
+  async function clearCurrentPeriod() {
+    if (!await modal.confirm({ title: "ניקוי התקופה", content: "לנקות את כל השיבוצים וההערות בתקופה הנוכחית?", okText: "נקה תקופה", cancelText: "ביטול", okButtonProps: { danger: true } })) return;
     setData((current) => ({
       ...current,
       periods: { ...current.periods, [current.currentStart]: createEmptyPeriod() },
@@ -407,315 +406,110 @@ function App() {
     : null;
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-block">
-          <div className="brand-icon" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-          <div>
-            <div className="title-line">
-              <h1>סידור משמרות</h1>
-              <span className={`save-state save-state--${saveState}`}>
-                {saveState === "saved" && "נשמר אוטומטית"}
-                {saveState === "saving" && "שומר…"}
-                {saveState === "unavailable" && "השמירה אינה זמינה"}
-              </span>
-            </div>
-            <p>{formatRange(periodStart, periodEnd)}</p>
-          </div>
-        </div>
+    <Layout className="planner-layout">
+      <Layout.Content className="planner-content">
+        <Flex justify="space-between" align="center" gap="middle" wrap className="planner-heading">
+          <Space orientation="vertical" size={0}>
+            <Typography.Title level={3} style={{ margin: 0 }}>סידור משמרות</Typography.Title>
+            <Typography.Text type="secondary">{formatRange(periodStart, periodEnd)}</Typography.Text>
+          </Space>
+          <Space wrap className="no-print">
+            <Badge status={saveState === "saved" ? "success" : saveState === "saving" ? "processing" : "error"} text={saveState === "saved" ? "נשמר אוטומטית" : saveState === "saving" ? "שומר…" : "השמירה אינה זמינה"} />
+            <Button icon={<PrinterOutlined />} onClick={() => window.print()}>הדפסה</Button>
+            <Button danger icon={<DeleteOutlined />} onClick={clearCurrentPeriod}>נקה תקופה</Button>
+          </Space>
+        </Flex>
 
-        <div className="top-actions no-print">
-          <button className="button button-ghost" type="button" onClick={clearCurrentPeriod}>
-            נקה תקופה
-          </button>
-          <button className="button button-light" type="button" onClick={() => window.print()}>
-            <span className="print-symbol" aria-hidden="true">⎙</span>
-            הדפסה
-          </button>
-        </div>
-      </header>
+        <Card className="no-print" size="small">
+          <Flex justify="space-between" align="center" gap="middle" wrap>
+            <Space wrap>
+              <Button icon={<RightOutlined />} onClick={() => movePeriod(-14)}>התקופה הקודמת</Button>
+              <DatePicker aria-label="תאריך תחילת הסידור" value={dayjs(data.currentStart)} allowClear={false} format="DD/MM/YYYY" onChange={(date) => { if (date) handleDateChange(date.format("YYYY-MM-DD")); }} />
+              <Button icon={<LeftOutlined />} onClick={() => movePeriod(14)}>התקופה הבאה</Button>
+            </Space>
+            <Space wrap>
+              <Button icon={<CopyOutlined />} onClick={copyFirstWeek}>העתק שבוע ראשון לשבוע שני</Button>
+              {period.beforeWeekCopy && <Button icon={<UndoOutlined />} onClick={undoWeekCopy}>בטל העתקה לשבוע השני</Button>}
+            </Space>
+          </Flex>
+        </Card>
 
-      <main>
-        <section className="control-panel no-print" aria-label="הגדרות הסידור">
-          <div className="period-controls">
-            <button className="nav-button" type="button" onClick={() => movePeriod(14)}>
-              <span aria-hidden="true">‹</span>
-              התקופה הבאה
-            </button>
-            <label className="date-field">
-              <span>יום ראשון הראשון</span>
-              <input
-                type="date"
-                value={data.currentStart}
-                onChange={(event) => handleDateChange(event.target.value)}
-              />
-            </label>
-            <button className="nav-button" type="button" onClick={() => movePeriod(-14)}>
-              התקופה הקודמת
-              <span aria-hidden="true">›</span>
-            </button>
-          </div>
+        <Card size="small" title={<Space><TeamOutlined />אנשי צוות <Tag>{data.staff.length}</Tag></Space>} className="no-print">
+          <Form onFinish={handleAddStaff} className="staff-form">
+            <Space.Compact block>
+              <Input value={newStaffName} maxLength={50} autoComplete="off" onChange={(event) => setNewStaffName(event.target.value)} placeholder="שם איש הצוות" aria-label="שם איש הצוות" />
+              <Button type="primary" htmlType="submit" icon={<PlusOutlined />} disabled={!newStaffName.trim()}>הוסף</Button>
+            </Space.Compact>
+          </Form>
+          <Flex gap="small" wrap className="staff-list">
+            {data.staff.length === 0 ? <Typography.Text type="secondary">הוסיפו אנשי צוות כדי להתחיל לשבץ.</Typography.Text> : data.staff.map((member) => (
+              <Tag key={member.id} closable onClose={(event) => { event.preventDefault(); void removeStaff(member); }}>{member.name}</Tag>
+            ))}
+          </Flex>
+        </Card>
 
-          <div className="staff-panel">
-            <div className="section-heading">
-              <div>
-                <h2>אנשי צוות</h2>
-                <p>מוסיפים פעם אחת ובוחרים בכל משמרת</p>
-              </div>
-              <span className="staff-count" aria-label={`${data.staff.length} אנשי צוות`}>
-                {data.staff.length}
-              </span>
-            </div>
+        <Alert className="guide-notice" type="info" showIcon title="מדריכים יקרים, כל מי שרוצה להחליף משמרת שיעדכן אותי ויסמן בדף." />
 
-            <form className="add-staff-form" onSubmit={handleAddStaff}>
-              <input
-                type="text"
-                value={newStaffName}
-                maxLength={50}
-                autoComplete="off"
-                onChange={(event) => setNewStaffName(event.target.value)}
-                placeholder="שם איש הצוות"
-                aria-label="שם איש הצוות"
-              />
-              <button className="button button-primary" type="submit">הוסף</button>
-            </form>
+        {[0, 1].map((weekIndex) => {
+          const weekStart = addDays(periodStart, weekIndex * 7);
+          const weekEnd = addDays(weekStart, 6);
+          const weekInfo = getJewishWeekInfo(weekEnd);
+          const columns: TableColumnsType<{ key: number }> = DAYS.map((dayName, dayIndex) => {
+            const date = addDays(weekStart, dayIndex);
+            const jewishDay = getJewishDayInfo(date);
+            return {
+              key: dayName,
+              title: <Space orientation="vertical" size={2}>
+                <Typography.Text strong>{dayName}</Typography.Text>
+                <Typography.Text type="secondary">{shortDateFormatter.format(date)} · {jewishDay.hebrewDate}</Typography.Text>
+                {jewishDay.holidays.length > 0 && <Tag color="gold" style={{ whiteSpace: "normal", margin: 0 }}>{jewishDay.holidays.join(" · ")}</Tag>}
+              </Space>,
+              onCell: (_, rowIndex) => ({ rowSpan: dayIndex >= 5 ? rowIndex === 0 ? 2 : 0 : 1 }),
+              render: (_, row) => {
+                const shiftType = getShiftsForDay(dayIndex)[row.key];
+                if (!shiftType) return null;
+                const meta = SHIFT_META[shiftType];
+                const members = getAssignmentIds(weekIndex, dayIndex, shiftType).map((id) => staffById.get(id)).filter((member): member is StaffMember => Boolean(member));
+                return <Button block type={members.length ? "default" : "dashed"} className="shift-button" onClick={() => openAssignment(weekIndex, dayIndex, shiftType)} aria-label={`${meta.label}, ${dayName}, ${shortDateFormatter.format(date)}`}>
+                  <Flex vertical gap="small" align="stretch" className="shift-content">
+                    <Flex justify="space-between" align="center" gap={4}>
+                      <Tag color={shiftType === "afternoon" ? "blue" : shiftType === "friday" ? "purple" : "geekblue"} style={{ margin: 0 }}>{meta.shortLabel}</Tag>
+                      {members.length > 0 && <Typography.Text type="secondary">{members.length}</Typography.Text>}
+                    </Flex>
+                    {members.length ? members.map((member) => <Typography.Text key={member.id}>{member.name}</Typography.Text>) : <Typography.Text type="secondary"><PlusOutlined /> הוספת שיבוץ</Typography.Text>}
+                  </Flex>
+                </Button>;
+              },
+            };
+          });
+          return <Card key={weekIndex} className="week-card" size="small" title={<Space wrap><CalendarOutlined /><span>שבוע {weekIndex === 0 ? "ראשון" : "שני"}</span><Typography.Text type="secondary">{formatRange(weekStart, weekEnd)}</Typography.Text></Space>}>
+            <Flex justify="space-between" align="center" gap="small" wrap className="week-toolbar">
+              <Space wrap><Tag color="blue">{weekInfo.parasha || weekInfo.shabbatHoliday || "שבת חג"}</Tag><Typography.Text type="secondary" className="no-print">{shiftCounts[weekIndex]} מתוך {totalShifts / 2} משמרות משובצות</Typography.Text></Space>
+              <Input className="week-note no-print" aria-label={`הערה לשבוע ${weekIndex + 1}`} placeholder="הערה לשבוע" maxLength={80} value={period.weekNotes[weekIndex]} onChange={(event) => updateWeekNote(weekIndex, event.target.value)} />
+              {period.weekNotes[weekIndex] && <Typography.Text className="print-only">{period.weekNotes[weekIndex]}</Typography.Text>}
+            </Flex>
+            <Table className="week-table" columns={columns} dataSource={[{ key: 0 }, { key: 1 }]} pagination={false} bordered size="small" tableLayout="fixed" scroll={{ x: 1000 }} />
+          </Card>;
+        })}
+      </Layout.Content>
 
-            <div className="staff-list" aria-live="polite">
-              {data.staff.length === 0 ? (
-                <p className="empty-staff">עדיין לא הוספת אנשי צוות</p>
-              ) : (
-                data.staff.map((member) => (
-                  <span className="staff-chip" key={member.id}>
-                    {member.name}
-                    <button
-                      type="button"
-                      onClick={() => removeStaff(member)}
-                      aria-label={`הסר את ${member.name}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="helper-strip no-print">
-          <p><strong>איך משבצים?</strong> לוחצים על משמרת ובוחרים שם אחד או יותר.</p>
-          <button className="text-button" type="button" onClick={copyFirstWeek}>
-            העתק שבוע ראשון לשבוע שני
-          </button>
-          {period.beforeWeekCopy && (
-            <button className="text-button" type="button" onClick={undoWeekCopy}>
-              בטל העתקה לשבוע השני
-            </button>
-          )}
-        </section>
-
-        <div className="weeks">
-          {[0, 1].map((weekIndex) => {
-            const weekStart = addDays(periodStart, weekIndex * 7);
-            const weekEnd = addDays(weekStart, 6);
-            const weekInfo = getJewishWeekInfo(weekEnd);
-
-            return (
-              <article className="week-card" key={weekIndex}>
-                <p className="guide-notice">
-                  מדריכים יקרים, כל מי שרוצה להחליף משמרת שיעדכן אותי ויסמן בדף.
-                </p>
-                <header className="week-header">
-                  <div>
-                    <span className="week-number">שבוע {weekIndex === 0 ? "ראשון" : "שני"}</span>
-                    <h2>{formatRange(weekStart, weekEnd)}</h2>
-                    <p className="week-jewish-title">
-                      {weekInfo.parasha
-                        ? ` ${weekInfo.parasha}`
-                        : weekInfo.shabbatHoliday || "שבת חג"}
-                    </p>
-                  </div>
-                  <div className="week-fields no-print">
-                    <label className="week-note-field">
-                      <span>הערה לשבוע</span>
-                      <input
-                        type="text"
-                        maxLength={80}
-                        value={period.weekNotes[weekIndex]}
-                        onChange={(event) => updateWeekNote(weekIndex, event.target.value)}
-                        placeholder="אירוע או הערה נוספת"
-                      />
-                    </label>
-                  </div>
-                  {period.weekNotes[weekIndex] && (
-                    <p className="print-week-note">{period.weekNotes[weekIndex]}</p>
-                  )}
-                </header>
-
-                <div className="week-scroll">
-                  <div className="week-grid">
-                    {DAYS.map((dayName, dayIndex) => {
-                      const date = addDays(weekStart, dayIndex);
-                      const jewishDay = getJewishDayInfo(date);
-                      const isWeekend = dayIndex >= 5;
-
-                      return (
-                        <section
-                          className={`day-card${isWeekend ? " day-card--weekend" : ""}`}
-                          key={dayName}
-                        >
-                          <header className="day-header">
-                            <div>
-                              {!isWeekend && <span className="day-prefix">יום</span>}
-                              <h3>{dayName}</h3>
-                            </div>
-                            <time dateTime={toDateKey(date)}>
-                              <span>{shortDateFormatter.format(date)}</span>
-                              <span className="hebrew-date">{jewishDay.hebrewDate}</span>
-                            </time>
-                          </header>
-
-                          {jewishDay.holidays.length > 0 && (
-                            <p className="holiday-label">{jewishDay.holidays.join(" · ")}</p>
-                          )}
-
-                          <div className="day-shifts">
-                            {getShiftsForDay(dayIndex).map((shiftType) => {
-                              const meta = SHIFT_META[shiftType];
-                              const key = assignmentKey(weekIndex, dayIndex, shiftType);
-                              const members = getAssignmentIds(weekIndex, dayIndex, shiftType)
-                                .map((id) => staffById.get(id))
-                                .filter((member): member is StaffMember => Boolean(member));
-
-                              return (
-                                <button
-                                  className={`shift-card shift-card--${meta.tone}${
-                                    members.length ? " shift-card--filled" : ""
-                                  }`}
-                                  type="button"
-                                  key={shiftType}
-                                  onClick={() => openAssignment(weekIndex, dayIndex, shiftType)}
-                                  aria-label={`${meta.label}, ${isWeekend ? "" : "יום "}${dayName}, ${shortDateFormatter.format(date)}`}
-                                >
-                                  <span className="shift-heading">
-                                    <span>
-                                      <i aria-hidden="true" />
-                                      {meta.shortLabel}
-                                    </span>
-                                    {members.length > 0 && <b>{members.length}</b>}
-                                  </span>
-
-                                  {members.length === 0 ? (
-                                    <span className="empty-shift">לחצו לשיבוץ</span>
-                                  ) : (
-                                    <span className="assigned-list">
-                                      {members.map((member) => (
-                                        <span key={member.id}>{member.name}</span>
-                                      ))}
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      );
-                    })}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </main>
-
-      <dialog
-        className="assignment-dialog"
-        ref={dialogRef}
-        aria-labelledby="assignment-dialog-title"
-        onCancel={(event) => {
-          event.preventDefault();
-          setEditing(null);
-        }}
-        onClick={(event) => {
-          if (event.target === dialogRef.current) setEditing(null);
-        }}
-      >
-        <div className="dialog-header">
-          <div>
-            <p className="dialog-kicker">
-              {editing && editingDate
-                ? `${editing.dayIndex < 5 ? "יום " : ""}${DAYS[editing.dayIndex]} · ${fullDateFormatter.format(editingDate)}`
-                : ""}
-            </p>
-            <h2 id="assignment-dialog-title">
-              {editing ? SHIFT_META[editing.shiftType].label : "שיבוץ משמרת"}
-            </h2>
-          </div>
-          <button
-            className="dialog-close"
-            type="button"
-            onClick={() => setEditing(null)}
-            aria-label="סגירת החלון"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="assignment-options">
-          {data.staff.length === 0 ? (
-            <div className="dialog-empty">
-              <strong>רשימת הצוות עדיין ריקה</strong>
-              <span>אפשר להוסיף שם חדש ממש כאן.</span>
-            </div>
-          ) : (
-            data.staff.map((member) => {
-              const checked = draftIds.includes(member.id);
-              return (
-                <label className={`member-option${checked ? " member-option--checked" : ""}`} key={member.id}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleDraftId(member.id)}
-                  />
-                  <span className="custom-checkbox" aria-hidden="true">✓</span>
-                  <span>{member.name}</span>
-                </label>
-              );
-            })
-          )}
-        </div>
-
-        <form className="dialog-add-form" onSubmit={handleDialogAddStaff}>
-          <input
-            type="text"
-            value={dialogStaffName}
-            maxLength={50}
-            autoComplete="off"
-            onChange={(event) => setDialogStaffName(event.target.value)}
-            placeholder="שם חדש שלא נמצא ברשימה"
-            aria-label="הוספת איש צוות חדש"
-          />
-          <button className="button button-secondary" type="submit">הוסף ובחר</button>
-        </form>
-
-        <div className="dialog-actions">
-          <button className="button button-ghost-dark" type="button" onClick={() => setEditing(null)}>
-            ביטול
-          </button>
-          <button className="button button-primary" type="button" onClick={saveAssignment}>
-            שמור שיבוץ
-          </button>
-        </div>
-      </dialog>
-
-      <div className={`toast${toast ? " toast--visible" : ""}`} role="status" aria-live="polite">
-        {toast}
-      </div>
-    </div>
+      <Modal open={Boolean(editing)} onCancel={() => setEditing(null)} onOk={saveAssignment} title={editing ? SHIFT_META[editing.shiftType].label : "שיבוץ משמרת"} okText="שמור שיבוץ" cancelText="ביטול" destroyOnHidden>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+          <Typography.Text type="secondary">{editing && editingDate ? `${DAYS[editing.dayIndex]} · ${fullDateFormatter.format(editingDate)}` : ""}</Typography.Text>
+          {data.staff.length > 0 && <Input.Search allowClear value={staffSearch} onChange={(event) => setStaffSearch(event.target.value)} placeholder="חיפוש איש צוות" aria-label="חיפוש איש צוות" />}
+          <Typography.Text type="secondary">{draftIds.length} נבחרו</Typography.Text>
+          <Flex vertical gap="small" className="assignment-options">
+            {visibleStaff.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={data.staff.length ? "לא נמצאו שמות" : "הוסיפו איש צוות כדי לשבץ"} /> : visibleStaff.map((member) => <Checkbox key={member.id} checked={draftIds.includes(member.id)} onChange={() => toggleDraftId(member.id)}>{member.name}</Checkbox>)}
+          </Flex>
+          <Form onFinish={handleDialogAddStaff}>
+            <Space.Compact block>
+              <Input value={dialogStaffName} maxLength={50} autoComplete="off" onChange={(event) => setDialogStaffName(event.target.value)} placeholder="שם חדש שלא נמצא ברשימה" aria-label="הוספת איש צוות חדש" />
+              <Button htmlType="submit" icon={<PlusOutlined />} disabled={!dialogStaffName.trim()}>הוסף ובחר</Button>
+            </Space.Compact>
+          </Form>
+        </Space>
+      </Modal>
+    </Layout>
   );
 }
 

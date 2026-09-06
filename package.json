@@ -9,7 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.3.4",
     "@hebcal/core": "^6.9.2",
+    "antd": "^6.6.2",
+    "dayjs": "^1.11.23",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
