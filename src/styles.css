@@ -20,6 +20,8 @@ body { margin: 0; min-width: 320px; }
 .recurring-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .recurring-button { height: auto; min-height: 72px; margin-top: 8px; padding: 10px; font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
 .assignment-source { font-size: 12px; color: #595959; }
+.availability-form { margin-bottom: 16px; }
+.availability-warning { font-size: 13px; }
 @media (max-width: 600px) {
   .planner-content { padding: 12px; gap: 12px; }
   .week-note { max-width: none; }

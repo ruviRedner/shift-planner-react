@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { browserRepository } from "./storage/repository";
 import { App as AntApp, ConfigProvider } from "antd";
 import heIL from "antd/locale/he_IL";
 import "dayjs/locale/he";
@@ -10,7 +11,7 @@ import "./styles.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ConfigProvider direction="rtl" locale={heIL}>
-      <AntApp><App /></AntApp>
+      <AntApp><App repository={browserRepository} /></AntApp>
     </ConfigProvider>
   </StrictMode>,
 );
