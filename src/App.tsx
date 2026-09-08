@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { applyRecurringToPeriods, copyWeek, removeMember, resolveAssignment, restoreWeek } from "./assignments";
 import {
   getJewishDayInfo,
   getJewishWeekInfo,
@@ -32,9 +33,11 @@ type PlannerData = {
   currentStart: string;
   staff: StaffMember[];
   periods: Record<string, Period>;
+  recurring: Record<string, string[]>;
 };
 
 type EditingShift = {
+  recurring?: boolean;
   weekIndex: number;
   dayIndex: number;
   shiftType: ShiftType;
@@ -95,6 +98,7 @@ function makeInitialData(): PlannerData {
     currentStart: getDefaultStart(),
     staff: [],
     periods: {},
+    recurring: {},
   };
 }
 
@@ -131,6 +135,7 @@ function loadData(): PlannerData {
       }
     }
 
+    parsed.recurring ??= {};
     return parsed as PlannerData;
   } catch {
     return makeInitialData();
@@ -188,7 +193,7 @@ function App() {
   );
   const shiftCounts = [0, 1].map((weekIndex) =>
     DAYS.reduce((count, _, dayIndex) => count + getShiftsForDay(dayIndex).filter(
-      (shift) => (period.assignments[assignmentKey(weekIndex, dayIndex, shift)] ?? []).some((id) => staffById.has(id)),
+      (shift) => getAssignmentIds(weekIndex, dayIndex, shift).some((id) => staffById.has(id)),
     ).length, 0),
   );
   const totalShifts = DAYS.reduce((count, _, index) => count + getShiftsForDay(index).length, 0) * 2;
@@ -256,7 +261,7 @@ function App() {
   }
 
   async function removeStaff(member: StaffMember) {
-    const isAssigned = Object.values(data.periods).some((savedPeriod) =>
+    const isAssigned = Object.values(data.recurring).some((ids) => ids.includes(member.id)) || Object.values(data.periods).some((savedPeriod) =>
       Object.values(savedPeriod.assignments).some((ids) => ids.includes(member.id)),
     );
     const message = isAssigned
@@ -268,29 +273,26 @@ function App() {
     setData((current) => {
       const periods = Object.fromEntries(
         Object.entries(current.periods).map(([dateKey, savedPeriod]) => {
-          const assignments = Object.fromEntries(
-            Object.entries(savedPeriod.assignments)
-              .map(([key, ids]) => [key, ids.filter((id) => id !== member.id)] as const)
-              .filter(([, ids]) => ids.length > 0),
-          );
-          return [dateKey, { ...savedPeriod, assignments }];
+          return [dateKey, { ...savedPeriod, assignments: removeMember(savedPeriod.assignments, member.id),
+            beforeWeekCopy: savedPeriod.beforeWeekCopy ? removeMember(savedPeriod.beforeWeekCopy, member.id) : undefined }];
         }),
       );
 
       return {
         ...current,
         staff: current.staff.filter((item) => item.id !== member.id),
+        recurring: removeMember(current.recurring, member.id),
         periods,
       };
     });
     setToast("איש הצוות הוסר");
   }
 
-  function openAssignment(weekIndex: number, dayIndex: number, shiftType: ShiftType) {
+  function openAssignment(weekIndex: number, dayIndex: number, shiftType: ShiftType, recurring = false) {
     setStaffSearch("");
-    setDraftIds(getAssignmentIds(weekIndex, dayIndex, shiftType));
+    setDraftIds(recurring ? data.recurring[`${dayIndex}:${shiftType}`] ?? [] : getAssignmentIds(weekIndex, dayIndex, shiftType));
     setDialogStaffName("");
-    setEditing({ weekIndex, dayIndex, shiftType });
+    setEditing({ weekIndex, dayIndex, shiftType, recurring });
   }
 
   function toggleDraftId(id: string) {
@@ -301,12 +303,20 @@ function App() {
 
   function saveAssignment() {
     if (!editing) return;
+    if (editing.recurring) {
+      setData((current) => ({ ...current,
+        recurring: { ...current.recurring, [`${editing.dayIndex}:${editing.shiftType}`]: [...draftIds] },
+        periods: applyRecurringToPeriods(current.periods, editing.dayIndex, editing.shiftType, draftIds),
+      }));
+      setEditing(null);
+      setToast("הקביעות נשמרה והאנשים שנבחרו נוספו למשמרת בכל השבועות");
+      return;
+    }
     const key = assignmentKey(editing.weekIndex, editing.dayIndex, editing.shiftType);
 
     updateCurrentPeriod((current) => {
       const assignments = { ...current.assignments };
-      if (draftIds.length > 0) assignments[key] = draftIds;
-      else delete assignments[key];
+      assignments[key] = [...draftIds];
       return {
         ...current,
         assignments,
@@ -316,6 +326,18 @@ function App() {
 
     setEditing(null);
     setToast("השיבוץ נשמר");
+  }
+
+  function restoreRecurring() {
+    if (!editing || editing.recurring) return;
+    const key = assignmentKey(editing.weekIndex, editing.dayIndex, editing.shiftType);
+    updateCurrentPeriod((current) => {
+      const assignments = { ...current.assignments };
+      delete assignments[key];
+      return { ...current, assignments, beforeWeekCopy: editing.weekIndex === 1 ? undefined : current.beforeWeekCopy };
+    });
+    setEditing(null);
+    setToast("המשמרת חזרה לשיבוץ הקבוע");
   }
 
   function movePeriod(dayOffset: number) {
@@ -345,14 +367,11 @@ function App() {
     dayIndex: number,
     shiftType: ShiftType,
   ): string[] {
-    const currentKey = assignmentKey(weekIndex, dayIndex, shiftType);
-    return period.assignments[currentKey] ?? [];
+    return resolveAssignment(period.assignments, data.recurring, weekIndex, dayIndex, shiftType);
   }
 
   async function copyFirstWeek() {
-    const targetHasAssignments = Object.keys(period.assignments).some((key) =>
-      key.startsWith("1:"),
-    );
+    const targetHasAssignments = shiftCounts[1] > 0;
     if (
       targetHasAssignments &&
       !await modal.confirm({ title: "העתקת שיבוצים", content: "בשבוע השני כבר יש שיבוצים. להחליף אותם בשיבוצי השבוע הראשון?", okText: "העתק", cancelText: "ביטול" })
@@ -361,18 +380,7 @@ function App() {
     }
 
     updateCurrentPeriod((current) => {
-      const beforeWeekCopy = Object.fromEntries(
-        Object.entries(current.assignments).filter(([key]) => key.startsWith("1:")),
-      );
-      const assignments = Object.fromEntries(
-        Object.entries(current.assignments).filter(([key]) => !key.startsWith("1:")),
-      );
-
-      Object.entries(current.assignments).forEach(([key, ids]) => {
-        if (key.startsWith("0:")) assignments[key.replace(/^0:/, "1:")] = [...ids];
-      });
-
-      return { ...current, assignments, beforeWeekCopy };
+      return { ...current, ...copyWeek(current.assignments) };
     });
     setToast("השבוע הראשון הועתק לשבוע השני");
   }
@@ -380,23 +388,20 @@ function App() {
   function undoWeekCopy() {
     updateCurrentPeriod((current) => {
       if (!current.beforeWeekCopy) return current;
-      const assignments = Object.fromEntries(
-        Object.entries(current.assignments).filter(([key]) => !key.startsWith("1:")),
-      );
-      for (const [key, ids] of Object.entries(current.beforeWeekCopy)) {
-        const existingIds = ids.filter((id) => staffById.has(id));
-        if (existingIds.length > 0) assignments[key] = existingIds;
-      }
+      const assignments = restoreWeek(current.assignments, current.beforeWeekCopy, new Set(staffById.keys()));
       return { ...current, assignments, beforeWeekCopy: undefined };
     });
     setToast("ההעתקה בוטלה ושיבוצי השבוע השני שוחזרו");
   }
 
   async function clearCurrentPeriod() {
-    if (!await modal.confirm({ title: "ניקוי התקופה", content: "לנקות את כל השיבוצים וההערות בתקופה הנוכחית?", okText: "נקה תקופה", cancelText: "ביטול", okButtonProps: { danger: true } })) return;
+    if (!await modal.confirm({ title: "ניקוי התקופה", content: "לנקות את כל השיבוצים וההערות בתקופה הנוכחית? גם המשמרות הקבועות יישארו ריקות בתקופה זו בלבד. הגדרות הקביעות יישמרו לשאר השבועות.", okText: "נקה תקופה", cancelText: "ביטול", okButtonProps: { danger: true } })) return;
     setData((current) => ({
       ...current,
-      periods: { ...current.periods, [current.currentStart]: createEmptyPeriod() },
+      periods: { ...current.periods, [current.currentStart]: {
+        ...createEmptyPeriod(),
+        assignments: Object.fromEntries([0, 1].flatMap((week) => DAYS.flatMap((_, day) => getShiftsForDay(day).map((shift) => [assignmentKey(week, day, shift), []])))),
+      } },
     }));
     setToast("התקופה נוקתה");
   }
@@ -448,6 +453,23 @@ function App() {
           </Flex>
         </Card>
 
+        <Card size="small" className="no-print">
+          <details className="recurring-settings">
+            <summary>שיבוצים קבועים בכל שבוע</summary>
+            <Typography.Paragraph type="secondary">
+              בחרו יום ומשמרת והגדירו מי משובץ בקביעות. בשמירה האנשים שנבחרו מתווספים לכל המשמרות המתאימות בכל התקופות, גם לצד שיבוצים קיימים. לאחר מכן אפשר להחליף חד־פעמית בלחיצה על המשמרת בלוח.
+            </Typography.Paragraph>
+            <div className="recurring-grid">
+              {DAYS.map((day, dayIndex) => <div key={day}>
+                <Typography.Text strong>{day}</Typography.Text>
+                {getShiftsForDay(dayIndex).map((shift) => <Button key={shift} block className="recurring-button" onClick={() => openAssignment(0, dayIndex, shift, true)}>
+                  <span><strong>{SHIFT_META[shift].shortLabel}</strong><br />{(data.recurring[`${dayIndex}:${shift}`] ?? []).map((id) => staffById.get(id)?.name).filter(Boolean).join(", ") || "הגדרת אנשים קבועים"}</span>
+                </Button>)}
+              </div>)}
+            </div>
+          </details>
+        </Card>
+
         <Alert className="guide-notice" type="info" showIcon title="מדריכים יקרים, כל מי שרוצה להחליף משמרת שיעדכן אותי ויסמן בדף." />
 
         {[0, 1].map((weekIndex) => {
@@ -477,6 +499,7 @@ function App() {
                       {members.length > 0 && <Typography.Text type="secondary">{members.length}</Typography.Text>}
                     </Flex>
                     {members.length ? members.map((member) => <Typography.Text key={member.id}>{member.name}</Typography.Text>) : <Typography.Text type="secondary"><PlusOutlined /> הוספת שיבוץ</Typography.Text>}
+                    {(data.recurring[`${dayIndex}:${shiftType}`] ?? []).length > 0 && <span className="assignment-source no-print">{Object.hasOwn(period.assignments, assignmentKey(weekIndex, dayIndex, shiftType)) ? "שינוי חד־פעמי" : "שיבוץ קבוע"}</span>}
                   </Flex>
                 </Button>;
               },
@@ -493,9 +516,11 @@ function App() {
         })}
       </Layout.Content>
 
-      <Modal open={Boolean(editing)} onCancel={() => setEditing(null)} onOk={saveAssignment} title={editing ? SHIFT_META[editing.shiftType].label : "שיבוץ משמרת"} okText="שמור שיבוץ" cancelText="ביטול" destroyOnHidden>
+      <Modal open={Boolean(editing)} onCancel={() => setEditing(null)} onOk={saveAssignment} title={editing ? `${editing.recurring ? "שיבוץ קבוע · " : ""}${SHIFT_META[editing.shiftType].label}` : "שיבוץ משמרת"} okText={editing?.recurring ? "שמור קביעות" : "שמור לשבוע זה בלבד"} cancelText="ביטול" destroyOnHidden>
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-          <Typography.Text type="secondary">{editing && editingDate ? `${DAYS[editing.dayIndex]} · ${fullDateFormatter.format(editingDate)}` : ""}</Typography.Text>
+          <Typography.Text type="secondary">{editing && editingDate ? `${DAYS[editing.dayIndex]} · ${editing.recurring ? "בכל שבוע" : fullDateFormatter.format(editingDate)}` : ""}</Typography.Text>
+          <Alert type="info" showIcon title={editing?.recurring ? "בשמירה השמות שנבחרו יתווספו לכל השבועות, גם למשמרות עם שיבוץ ידני או למשמרות שרוקנו. אנשים שכבר שובצו יישארו. ביטול הבחירות מסיר את הקביעות, אך אינו מוחק שמות משיבוצים ידניים." : "השינוי יישמר למשמרת זו בלבד. הקביעות בשאר השבועות לא תשתנה. אפשר גם לבטל את כל הבחירות ולהשאיר את המשמרת ריקה."} />
+          {editing && !editing.recurring && Object.hasOwn(period.assignments, assignmentKey(editing.weekIndex, editing.dayIndex, editing.shiftType)) && <Button icon={<UndoOutlined />} onClick={restoreRecurring}>חזור לשיבוץ הקבוע</Button>}
           {data.staff.length > 0 && <Input.Search allowClear value={staffSearch} onChange={(event) => setStaffSearch(event.target.value)} placeholder="חיפוש איש צוות" aria-label="חיפוש איש צוות" />}
           <Typography.Text type="secondary">{draftIds.length} נבחרו</Typography.Text>
           <Flex vertical gap="small" className="assignment-options">

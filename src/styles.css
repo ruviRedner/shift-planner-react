@@ -1,4 +1,4 @@
-/* Layout and print rules only. Visual styles are provided by Ant Design. */
+/* Layout, planner typography, and print rules. */
 body { margin: 0; min-width: 320px; }
 .planner-layout { min-height: 100vh; }
 .planner-content { width: 100%; max-width: 1600px; margin: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
@@ -9,8 +9,17 @@ body { margin: 0; min-width: 320px; }
 .week-note { max-width: 260px; }
 .shift-button { height: auto; min-height: 94px; padding: 12px; white-space: normal; }
 .shift-content { width: 100%; text-align: start; }
+.shift-content > .ant-typography { font-size: 18px; line-height: 1.5; overflow-wrap: anywhere; }
+.shift-content .ant-tag { font-size: 16px; line-height: 1.5; font-weight: 600; white-space: normal; }
+.staff-list .ant-tag { font-size: 16px; line-height: 1.75; white-space: normal; overflow-wrap: anywhere; }
+.assignment-options .ant-checkbox-wrapper { font-size: 18px; line-height: 1.5; overflow-wrap: anywhere; }
 .assignment-options { max-height: 280px; overflow-y: auto; padding: 4px; }
 .print-only { display: none; }
+.recurring-settings summary { cursor: pointer; font-size: 17px; font-weight: 600; }
+.recurring-settings[open] summary { margin-bottom: 12px; }
+.recurring-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.recurring-button { height: auto; min-height: 72px; margin-top: 8px; padding: 10px; font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
+.assignment-source { font-size: 12px; color: #595959; }
 @media (max-width: 600px) {
   .planner-content { padding: 12px; gap: 12px; }
   .week-note { max-width: none; }
@@ -30,6 +39,8 @@ body { margin: 0; min-width: 320px; }
   .week-table table { width: 100% !important; min-width: 0 !important; }
   .week-table .ant-table-cell { padding: 1mm !important; font-size: 7pt; }
   .week-table .ant-typography, .week-table .ant-tag { font-size: 7pt; line-height: 1.4; }
+  .week-table .shift-content > .ant-typography { font-size: 11pt; line-height: 1.35; }
+  .week-table .shift-content .ant-tag { font-size: 10pt; }
   .week-table .ant-table-cell .ant-space { gap: 0 !important; }
   .shift-button { min-height: 15mm; padding: 1mm; }
   .shift-content { gap: 1mm !important; }
