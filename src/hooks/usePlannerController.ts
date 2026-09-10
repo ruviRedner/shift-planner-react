@@ -7,9 +7,10 @@ import { conflictsForPeriod } from "../domain/insights";
 import { DAYS, getShiftsForDay, createEmptyPeriod, parseDate, toDateKey, addDays, startOfSunday, createId, assignmentKey } from "../domain/planner";
 import type { Period, StaffMember, ShiftType, EditingShift } from "../domain/planner";
 import type { PlannerRepository } from "../storage/repository";
+import { visiblePeriod } from "../domain/periods";
 
 export function usePlannerController(repository: PlannerRepository) {
-  const { data, setData, navigate, restore, saveState, undo, canUndo, undoLabel, loadError } = usePlannerStore(repository);
+  const { data, setData, navigate, restore, saveState, saveError, undo, canUndo, undoLabel, loadError } = usePlannerStore(repository);
   const [newStaffName, setNewStaffName] = useState("");
   const [dialogStaffName, setDialogStaffName] = useState("");
   const [editing, setEditing] = useState<EditingShift | null>(null);
@@ -20,7 +21,7 @@ export function usePlannerController(repository: PlannerRepository) {
 
   const periodStart = useMemo(() => parseDate(data.currentStart), [data.currentStart]);
   const periodEnd = useMemo(() => addDays(periodStart, 13), [periodStart]);
-  const period = data.periods[data.currentStart] ?? createEmptyPeriod();
+  const period = useMemo(() => visiblePeriod(data), [data]);
 
   const staffById = useMemo(
     () => new Map(data.staff.map((member) => [member.id, member])),
@@ -197,7 +198,7 @@ export function usePlannerController(repository: PlannerRepository) {
 
 
   return {
-    data, setData, restore, saveState, undo, canUndo, undoLabel, loadError,
+    data, setData, restore, saveState, saveError, undo, canUndo, undoLabel, loadError,
     newStaffName, setNewStaffName, dialogStaffName, setDialogStaffName,
     editing, setEditing, draftIds, staffSearch, setStaffSearch,
     periodStart, periodEnd, period, staffById, visibleStaff, conflicts, editingDate,

@@ -4,7 +4,9 @@ import { decodePlanner, encodePlanner } from "./codec.ts";
 
 export interface PlannerRepository {
   load(): PlannerData;
-  save(data: PlannerData): void;
+  save(data: PlannerData): void | Promise<void>;
+  subscribe?(listener: (data: PlannerData) => void): () => void;
+  reload?(): Promise<void>;
 }
 
 export function createStorageRepository(storage: Pick<Storage, "getItem" | "setItem">): PlannerRepository {

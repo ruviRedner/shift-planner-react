@@ -3,11 +3,13 @@ import type { PlannerData } from "./planner.ts";
 export type HistoryEntry = { data: PlannerData; label: string; group?: string };
 export type PlannerHistory = { present: PlannerData; past: HistoryEntry[] };
 export type HistoryAction =
+  | { type: "external"; data: PlannerData }
   | { type: "change"; update: (data: PlannerData) => PlannerData; label: string; group?: string }
   | { type: "navigate"; start: string }
   | { type: "undo" };
 
 export function reduceHistory(state: PlannerHistory, action: HistoryAction): PlannerHistory {
+  if (action.type === "external") return { present: action.data, past: [] };
   if (action.type === "navigate") return { ...state, present: { ...state.present, currentStart: action.start } };
   if (action.type === "undo") {
     const previous = state.past.at(-1);

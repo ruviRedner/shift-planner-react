@@ -20,6 +20,7 @@ export type PlannerData = {
   periods: Record<string, Period>;
   recurring: Record<string, string[]>;
   unavailability: Unavailability[];
+  publications?: Record<string, Publication>;
 };
 
 export type EditingShift = {
@@ -119,3 +120,4 @@ export function formatRange(start: Date, end: Date): string {
 
 
 export type Unavailability = { id: string; staffId: string; start: string; end: string; note: string };
+export type Publication = { publishedAt: string; assignments: Record<string, string[]>; weekNotes: [string, string] };

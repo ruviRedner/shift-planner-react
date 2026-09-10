@@ -9,10 +9,12 @@ import { AssignmentDialog } from "./components/AssignmentDialog";
 import { DAYS, SHIFT_META, getShiftsForDay, parseDate, shortDateFormatter, formatRange } from "./domain/planner";
 import { usePlannerController } from "./hooks/usePlannerController";
 import type { PlannerRepository } from "./storage/repository";
+import { AutoScheduler } from "./components/AutoScheduler";
+import { PublishPanel } from "./components/PublishPanel";
 
 function App({ repository }: { repository: PlannerRepository }) {
   const {
-    data, setData, restore, saveState, undo, canUndo, undoLabel, loadError,
+    data, setData, restore, saveState, saveError, undo, canUndo, undoLabel, loadError,
     newStaffName, setNewStaffName, dialogStaffName, setDialogStaffName,
     editing, setEditing, draftIds, staffSearch, setStaffSearch,
     periodStart, periodEnd, period, staffById, visibleStaff, conflicts, editingDate,
@@ -29,6 +31,8 @@ function App({ repository }: { repository: PlannerRepository }) {
             <Typography.Text type="secondary">{formatRange(periodStart, periodEnd)}</Typography.Text>
           </Space>
           <Space wrap className="no-print">
+            <AutoScheduler data={data} onApply={setData} />
+            <PublishPanel data={data} onPublish={setData} />
             <BackupControls data={data} onRestore={restore} />
             <Button icon={<UndoOutlined />} disabled={!canUndo} title={undoLabel} onClick={() => { undo(); setEditing(null); setToast("הפעולה האחרונה בוטלה"); }}>בטל פעולה אחרונה</Button>
             <Badge status={saveState === "saved" ? "success" : saveState === "saving" ? "processing" : "error"} text={saveState === "saved" ? "נשמר אוטומטית" : saveState === "saving" ? "שומר…" : "השמירה אינה זמינה"} />
@@ -38,7 +42,7 @@ function App({ repository }: { repository: PlannerRepository }) {
         </Flex>
 
         {loadError && <Alert type="error" showIcon title={loadError} className="no-print" />}
-        {saveState === "unavailable" && !loadError && <Alert type="error" showIcon title="השינויים לא נשמרו בדפדפן. הורידו גיבוי כדי לשמור עותק לפני סגירת הדף." className="no-print" />}
+        {saveState === "unavailable" && !loadError && <Alert type="error" showIcon title="השינויים לא נשמרו. הורידו גיבוי לפני סגירת הדף או טעינת הגרסה מהשרת." description={saveError} className="no-print" action={repository.reload && <Button onClick={() => { void repository.reload!().catch((error) => setToast(error.message)); }}>טען גרסה מהשרת</Button>} />}
 
         <Card className="no-print" size="small">
           <Flex justify="space-between" align="center" gap="middle" wrap>

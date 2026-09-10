@@ -1,0 +1,20 @@
+import { assignmentKey } from "./planner.ts";
+import type { PlannerData, Publication } from "./planner.ts";
+import { conflictsForPeriod, periodSlots } from "./insights.ts";
+
+export function publicationSnapshot(data: PlannerData, publishedAt = new Date().toISOString()): Publication {
+  const names = new Map(data.staff.map((member) => [member.id, member.name]));
+  return { publishedAt, weekNotes: [...(data.periods[data.currentStart]?.weekNotes ?? ["", ""])],
+    assignments: Object.fromEntries(periodSlots(data).map((slot) => [assignmentKey(slot.week, slot.day, slot.shift), slot.ids.map((id) => names.get(id)).filter((name): name is string => Boolean(name))])) };
+}
+export function publicationReview(data: PlannerData) {
+  const current = publicationSnapshot(data);
+  const previous = data.publications?.[data.currentStart];
+  return {
+    snapshot: current, previous,
+    empty: periodSlots(data).filter((slot) => current.assignments[assignmentKey(slot.week, slot.day, slot.shift)].length === 0),
+    conflicts: conflictsForPeriod(data),
+    changed: previous ? Object.keys(current.assignments).filter((key) => JSON.stringify([...current.assignments[key]].sort()) !== JSON.stringify([...(previous.assignments[key] ?? [])].sort())) : [],
+    notesChanged: previous ? current.weekNotes.some((note, index) => note !== previous.weekNotes[index]) : false,
+  };
+}

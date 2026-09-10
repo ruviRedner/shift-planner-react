@@ -1,5 +1,5 @@
 import { getShiftsForDay, parseDate, toDateKey } from "../domain/planner.ts";
-import type { PlannerData, Period, Unavailability } from "../domain/planner.ts";
+import type { PlannerData, Period, Unavailability, Publication } from "../domain/planner.ts";
 import type { Assignments } from "../assignments.ts";
 
 const invalid = () => new Error("קובץ הגיבוי אינו תקין או שאינו בגרסה נתמכת.");
@@ -84,8 +84,22 @@ export function decodePlanner(raw: string): PlannerData {
     return { id, staffId, start: entry.start, end: entry.end, note: text(entry.note) };
   });
   if (new Set(unavailability.map((entry) => entry.id)).size !== unavailability.length) throw invalid();
-  return { version: 1, currentStart: sunday(parsed.currentStart), staff, periods,
+  const result: PlannerData = { version: 1, currentStart: sunday(parsed.currentStart), staff, periods,
     recurring: assignments(parsed.recurring ?? {}, staffIds, true), unavailability };
+  if (parsed.publications !== undefined) result.publications = Object.fromEntries(Object.entries(object(parsed.publications)).map(([date, value]) => {
+    sunday(date);
+    const publication = object(value);
+    const publishedAt = text(publication.publishedAt);
+    if (!Number.isFinite(Date.parse(publishedAt)) || !Array.isArray(publication.weekNotes) || publication.weekNotes.length !== 2) throw invalid();
+    const names = Object.fromEntries(Object.entries(object(publication.assignments)).map(([key, values]) => {
+      if (!Array.isArray(values)) throw invalid();
+      return [key, values.map((value) => text(value, 50))];
+    }));
+    assignments(names, new Set(Object.values(names).flat()));
+    const decoded: Publication = { publishedAt, assignments: names, weekNotes: [text(publication.weekNotes[0], 80), text(publication.weekNotes[1], 80)] };
+    return [date, decoded];
+  }));
+  return result;
 }
 
 export function encodePlanner(data: PlannerData): string {

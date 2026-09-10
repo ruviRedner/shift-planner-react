@@ -1,9 +1,11 @@
 import { applyRecurringToPeriods, removeMember } from "../assignments.ts";
 import { assignmentKey, createEmptyPeriod, DAYS, getShiftsForDay } from "./planner.ts";
 import type { Period, PlannerData, ShiftType } from "./planner.ts";
+import { synchronizePeriod, visiblePeriod } from "./periods.ts";
 
 export function updatePeriod(data: PlannerData, update: (period: Period) => Period): PlannerData {
-  return { ...data, periods: { ...data.periods, [data.currentStart]: update(data.periods[data.currentStart] ?? createEmptyPeriod()) } };
+  const before = visiblePeriod(data);
+  return synchronizePeriod(data, before, update(before));
 }
 
 export function deleteStaff(data: PlannerData, id: string): PlannerData {

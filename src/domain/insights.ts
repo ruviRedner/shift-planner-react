@@ -1,6 +1,7 @@
 import { resolveAssignment } from "../assignments.ts";
 import { addDays, createEmptyPeriod, DAYS, getShiftsForDay, parseDate, SHIFT_META, toDateKey } from "./planner.ts";
 import type { PlannerData, ShiftType, Unavailability } from "./planner.ts";
+import { visiblePeriod } from "./periods.ts";
 
 export function unavailableForShift(entries: Unavailability[], staffId: string, date: string, shift: ShiftType): boolean {
   const end = toDateKey(addDays(parseDate(date), SHIFT_META[shift].durationDays - 1));
@@ -8,7 +9,7 @@ export function unavailableForShift(entries: Unavailability[], staffId: string, 
 }
 
 export function periodSlots(data: PlannerData) {
-  const period = data.periods[data.currentStart] ?? createEmptyPeriod();
+  const period = visiblePeriod(data);
   return [0, 1].flatMap((week) => DAYS.flatMap((_, day) => getShiftsForDay(day).map((shift) => ({
     week, day, shift, date: toDateKey(addDays(parseDate(data.currentStart), week * 7 + day)),
     ids: resolveAssignment(period.assignments, data.recurring, week, day, shift),

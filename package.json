@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "node scripts/dev.mjs",
+    "server": "node server/index.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --test src/domain/*.test.mjs",
+    "test": "node --test src/domain/*.test.mjs server/*.test.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/node": "^26.5.0",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
