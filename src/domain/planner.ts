@@ -17,6 +17,8 @@ export type PlannerData = {
   version: 1;
   currentStart: string;
   staff: StaffMember[];
+  residents?: StaffMember[];
+  laundry?: Record<string, string[]>;
   periods: Record<string, Period>;
   recurring: Record<string, string[]>;
   unavailability: Unavailability[];
@@ -120,4 +122,4 @@ export function formatRange(start: Date, end: Date): string {
 
 
 export type Unavailability = { id: string; staffId: string; start: string; end: string; note: string };
-export type Publication = { publishedAt: string; assignments: Record<string, string[]>; weekNotes: [string, string] };
+export type Publication = { publishedAt: string; assignments: Record<string, string[]>; weekNotes: [string, string]; laundry?: Record<string, string[]> };

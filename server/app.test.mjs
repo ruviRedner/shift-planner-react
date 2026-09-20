@@ -40,12 +40,17 @@ async function fixture(t, asynchronous = false, publicEditing = false) {
 
 test('public editing permits anonymous planner saves with conflict protection while accounts stay private', async (t) => {
   const f = await fixture(t, true, true);
+  f.planner.residents = [{ id: 'resident-one', name: 'דייר לבדיקה' }];
+  f.planner.laundry = { [f.start]: ['resident-one'] };
   const loaded = await f.request('/planner');
   assert.equal(loaded.status, 200);
   assert.equal(loaded.body.users, undefined);
   const result = await f.request('/planner', { data: f.planner, revision: loaded.body.revision }, undefined, 'PUT');
   assert.equal(result.status, 200);
   assert.equal((await f.request('/planner')).body.revision, 2);
+  const persisted = (await f.request('/planner')).body.data;
+  assert.deepEqual(persisted.residents, f.planner.residents);
+  assert.deepEqual(persisted.laundry, f.planner.laundry);
   assert.equal((await f.request('/planner', { data: f.planner, revision: 1 }, undefined, 'PUT')).status, 409);
   assert.equal((await f.request('/team')).status, 401);
   assert.equal((await f.request('/invitations', { staffId: 'a' })).status, 401);

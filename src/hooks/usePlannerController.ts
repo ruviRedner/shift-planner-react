@@ -187,7 +187,7 @@ export function usePlannerController(repository: PlannerRepository) {
   }
 
   async function clearCurrentPeriod() {
-    if (!await modal.confirm({ title: "ניקוי התקופה", content: "לנקות את כל השיבוצים וההערות בתקופה הנוכחית? גם המשמרות הקבועות יישארו ריקות בתקופה זו בלבד. הגדרות הקביעות יישמרו לשאר השבועות.", okText: "נקה תקופה", cancelText: "ביטול", okButtonProps: { danger: true } })) return;
+    if (!await modal.confirm({ title: "ניקוי התקופה", content: "לנקות את כל השיבוצים, הכביסות וההערות בתקופה הנוכחית? גם המשמרות הקבועות יישארו ריקות בתקופה זו בלבד. הגדרות הקביעות יישמרו לשאר השבועות.", okText: "נקה תקופה", cancelText: "ביטול", okButtonProps: { danger: true } })) return;
     setData(clearPeriod, "ניקוי תקופה");
     setToast("התקופה נוקתה");
   }

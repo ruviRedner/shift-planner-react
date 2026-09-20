@@ -1,0 +1,29 @@
+import { test, expect } from '@playwright/test';
+
+test('residents and daily laundry persist, print, export and support removal undo', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: 'שם הדייר', exact: true }).fill('דייר לבדיקה');
+  await page.getByRole('button', { name: 'הוסף דייר', exact: true }).click();
+  await expect(page.locator('.resident-list')).toContainText('דייר לבדיקה');
+  await expect(page.locator('.laundry-cell')).toHaveCount(14);
+  const cell = page.locator('.laundry-cell').first();
+  await cell.getByRole('combobox').click();
+  await page.locator('.ant-select-item-option-content').getByText('דייר לבדיקה', { exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(cell.locator('.ant-select-selection-item')).toContainText('דייר לבדיקה');
+  await page.reload();
+  await expect(cell.locator('.ant-select-selection-item')).toContainText('דייר לבדיקה');
+  await page.emulateMedia({ media: 'print' });
+  await expect(cell.locator('.print-only')).toBeVisible();
+  await expect(cell.locator('.print-only')).toHaveText('דייר לבדיקה');
+  await page.emulateMedia({ media: 'screen' });
+  await page.getByRole('button', { name: 'מוכן לפרסום' }).click();
+  await page.getByRole('button', { name: 'צור תמונה לתצוגה מקדימה' }).click();
+  await expect(page.getByRole('img', { name: 'תצוגה מקדימה של סידור המשמרות לשיתוף' })).toBeVisible();
+  await page.locator('.ant-modal-footer').getByRole('button', { name: 'סגור', exact: true }).click();
+  await page.locator('.resident-list .ant-tag-close-icon').click();
+  await page.getByRole('button', { name: 'הסר', exact: true }).click();
+  await expect(cell.locator('.ant-select-selection-item')).toHaveCount(0);
+  await page.getByRole('button', { name: 'בטל פעולה אחרונה' }).click();
+  await expect(cell.locator('.ant-select-selection-item')).toContainText('דייר לבדיקה');
+});

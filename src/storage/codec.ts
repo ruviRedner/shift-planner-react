@@ -86,6 +86,22 @@ export function decodePlanner(raw: string): PlannerData {
   if (new Set(unavailability.map((entry) => entry.id)).size !== unavailability.length) throw invalid();
   const result: PlannerData = { version: 1, currentStart: sunday(parsed.currentStart), staff, periods,
     recurring: assignments(parsed.recurring ?? {}, staffIds, true), unavailability };
+  if (parsed.residents !== undefined) {
+    if (!Array.isArray(parsed.residents)) throw invalid();
+    result.residents = parsed.residents.map((value) => {
+      const resident = object(value), id = text(resident.id), name = text(resident.name, 50);
+      if (!id.trim() || !name.trim()) throw invalid();
+      return { id, name };
+    });
+    if (new Set(result.residents.map((resident) => resident.id)).size !== result.residents.length) throw invalid();
+  }
+  if (parsed.laundry !== undefined) {
+    const residents = new Set((result.residents ?? []).map((resident) => resident.id));
+    result.laundry = Object.fromEntries(Object.entries(object(parsed.laundry)).map(([date, ids]) => {
+      if (!validDate(date) || !Array.isArray(ids) || !ids.every((id) => typeof id === 'string' && residents.has(id))) throw invalid();
+      return [date, [...new Set(ids)]];
+    }));
+  }
   if (parsed.publications !== undefined) result.publications = Object.fromEntries(Object.entries(object(parsed.publications)).map(([date, value]) => {
     sunday(date);
     const publication = object(value);
@@ -97,6 +113,10 @@ export function decodePlanner(raw: string): PlannerData {
     }));
     assignments(names, new Set(Object.values(names).flat()));
     const decoded: Publication = { publishedAt, assignments: names, weekNotes: [text(publication.weekNotes[0], 80), text(publication.weekNotes[1], 80)] };
+    if (publication.laundry !== undefined) decoded.laundry = Object.fromEntries(Object.entries(object(publication.laundry)).map(([date, values]) => {
+      if (!validDate(date) || !Array.isArray(values)) throw invalid();
+      return [date, values.map((value) => text(value, 50))];
+    }));
     return [date, decoded];
   }));
   return result;

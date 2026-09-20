@@ -11,6 +11,8 @@ import { usePlannerController } from "./hooks/usePlannerController";
 import type { PlannerRepository } from "./storage/repository";
 import { AutoScheduler } from "./components/AutoScheduler";
 import { PublishPanel } from "./components/PublishPanel";
+import { ResidentsPanel } from "./components/ResidentsPanel";
+import { setLaundry } from "./domain/laundry";
 
 function App({ repository }: { repository: PlannerRepository }) {
   const {
@@ -89,6 +91,7 @@ function App({ repository }: { repository: PlannerRepository }) {
           </details>
         </Card>
 
+        <ResidentsPanel data={data} onChange={setData} />
         <AvailabilityPanel staff={data.staff} entries={data.unavailability}
           onAdd={(entry) => setData((current) => ({ ...current, unavailability: [...current.unavailability, entry] }), "הוספת חוסר זמינות")}
           onRemove={(id) => setData((current) => ({ ...current, unavailability: current.unavailability.filter((entry) => entry.id !== id) }), "הסרת חוסר זמינות")} />
@@ -100,7 +103,8 @@ function App({ repository }: { repository: PlannerRepository }) {
         } />}
         <Alert className="guide-notice" type="info" showIcon title="מדריכים יקרים, כל מי שרוצה להחליף משמרת שיעדכן אותי ויסמן בדף." />
 
-        <WeekBoard period={period} periodStart={periodStart} staff={data.staff} recurring={data.recurring} unavailability={data.unavailability} onEdit={openAssignment} onNote={updateWeekNote} />
+        <WeekBoard residents={data.residents ?? []} laundry={data.laundry ?? {}} onLaundry={(date, ids) => setData((current) => setLaundry(current, date, ids), "שינוי כביסות")}
+          period={period} periodStart={periodStart} staff={data.staff} recurring={data.recurring} unavailability={data.unavailability} onEdit={openAssignment} onNote={updateWeekNote} />
       </Layout.Content>
 
       <AssignmentDialog editing={editing} editingDate={editingDate} assignments={period.assignments}
