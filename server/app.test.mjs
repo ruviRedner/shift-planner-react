@@ -4,12 +4,23 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { createTeamServer } from './app.mjs';
+import { createTeamStore } from './store.mjs';
 import { makeInitialData, addDays, startOfSunday, toDateKey } from '../src/domain/planner.ts';
 
-async function fixture(t) {
+async function fixture(t, asynchronous = false) {
   const directory = mkdtempSync(join(tmpdir(), 'planner-test-'));
   const file = join(directory, 'team.json');
-  const app = createTeamServer({ dataFile: file, setupToken: 'test-setup-code' });
+  const backing = createTeamStore(file);
+  const writes = { fail: false };
+  const store = asynchronous ? {
+    read: async () => structuredClone(backing.read()),
+    update: async (transform) => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      if (writes.fail) throw Object.assign(new Error('Storage unavailable'), { status: 503 });
+      return backing.update(transform);
+    },
+  } : undefined;
+  const app = createTeamServer({ store, dataFile: file, setupToken: 'test-setup-code' });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${app.server.address().port}`;
   t.after(async () => { await new Promise((resolve) => app.server.close(resolve));
@@ -24,8 +35,21 @@ async function fixture(t) {
   const planner = { ...makeInitialData(), currentStart: start, staff: [{ id: 'a', name: 'ישראל' }, { id: 'b', name: 'דוד' }], recurring: { '4:afternoon': ['a'] } };
   assert.equal((await request('/planner', { data: planner, revision: 0 }, admin.cookie, 'PUT')).status, 200);
   async function invite(id, username) { const invitation = await request('/invitations', { staffId: id }, admin.cookie); return request('/join', { token: invitation.body.token, username, password: 'strong-test-password' }); }
-  return { request, admin, planner, start, invite, file, base };
+  return { request, admin, planner, start, invite, file, base, writes };
 }
+
+test('async storage commits before success and reports failed saves without changing data', async (t) => {
+  const f = await fixture(t, true);
+  assert.equal((await f.invite('a', 'israel')).status, 201);
+  f.writes.fail = true;
+  assert.equal((await f.request('/planner', { data: f.planner, revision: 1 }, f.admin.cookie, 'PUT')).status, 503);
+  const saved = (await f.request('/planner', undefined, f.admin.cookie)).body;
+  assert.equal(saved.revision, 1);
+  assert.equal(saved.data.staff.length, 2);
+  f.writes.fail = false;
+  const results = await Promise.all([1, 2].map(() => f.request('/planner', { data: f.planner, revision: 1 }, f.admin.cookie, 'PUT')));
+  assert.deepEqual(results.map((result) => result.status).sort(), [200, 409]);
+});
 
 test('server authenticates accounts, protects roles and stores password hashes', async (t) => {
   const f = await fixture(t), member = await f.invite('a', 'israel');

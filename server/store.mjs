@@ -2,10 +2,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from '
 import { dirname } from 'node:path';
 import { makeInitialData } from '../src/domain/planner.ts';
 
-export function createTeamStore(file) {
-  let state = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {
+export function initialTeamState() {
+  return {
     version: 1, revision: 0, planner: makeInitialData(), users: [], invitations: [], requests: [], audit: [],
   };
+}
+
+export function createTeamStore(file) {
+  let state = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : initialTeamState();
   if (state.version !== 1 || !Array.isArray(state.users)) throw new Error('Unsupported team data file');
   return {
     read: () => state,

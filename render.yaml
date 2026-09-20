@@ -2,10 +2,10 @@ services:
   - type: web
     name: shift-planner
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
-    healthCheckPath: /api/status
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
         value: 24
@@ -17,11 +17,7 @@ services:
         value: "1"
       - key: VITE_SHARED_ONLY
         value: "true"
-      - key: PLANNER_DATA_FILE
-        value: /var/data/team.json
+      - key: DATABASE_URL
+        sync: false
       - key: PLANNER_SETUP_TOKEN
         generateValue: true
-    disk:
-      name: planner-data
-      mountPath: /var/data
-      sizeGB: 1

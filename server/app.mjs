@@ -18,8 +18,8 @@ async function body(request) {
 function limitedText(value, limit = 200) { if (typeof value !== 'string' || value.length > limit) throw fail(400, 'טקסט לא תקין'); return value.trim(); }
 const safeUser = ({ id, username, role, staffId, disabled }) => ({ id, username, role, staffId, disabled });
 
-export function createTeamServer({ dataFile, setupToken, secureCookies = false, dist = resolve('dist'), appOrigin } = {}) {
-  const store = createTeamStore(dataFile ?? resolve('.planner-data/team.json'));
+export function createTeamServer({ dataFile, store: suppliedStore, setupToken, secureCookies = false, dist = resolve('dist'), appOrigin } = {}) {
+  const store = suppliedStore ?? createTeamStore(dataFile ?? resolve('.planner-data/team.json'));
   const sessions = createSessions(secureCookies), attempts = new Map();
   const bootstrap = setupToken ?? token();
   const server = createServer(async (request, response) => {
@@ -29,6 +29,8 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
     const send = (status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(value)); };
     try {
       const url = new URL(request.url, 'http://localhost'), route = url.pathname, method = request.method;
+      // Health probes must not keep a serverless database awake while nobody uses the app.
+      if (route === '/api/health' && method === 'GET') { send(200, { ok: true }); return; }
       if (!route.startsWith('/api/')) {
         if (!['GET', 'HEAD'].includes(method)) throw fail(405, 'פעולה לא נתמכת');
         const root = resolve(dist), requested = resolve(root, `.${decodeURIComponent(route)}`);
@@ -40,9 +42,10 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
       }
       if (!['GET', 'HEAD'].includes(method) && request.headers.origin && request.headers.origin !== (appOrigin ?? `http${secureCookies ? 's' : ''}://${request.headers.host}`)) throw fail(403, 'מקור הבקשה אינו מורשה');
       if (!['GET', 'HEAD'].includes(method) && !request.headers['content-type']?.startsWith('application/json')) throw fail(415, 'נדרש JSON');
+      const snapshot = await store.read();
       const userId = sessions.read(request);
-      const user = store.read().users.find((entry) => entry.id === userId && !entry.disabled);
-      if (route === '/api/status' && method === 'GET') { send(200, { needsSetup: store.read().users.length === 0, user: user ? safeUser(user) : null }); return; }
+      const user = snapshot.users.find((entry) => entry.id === userId && !entry.disabled);
+      if (route === '/api/status' && method === 'GET') { send(200, { needsSetup: snapshot.users.length === 0, user: user ? safeUser(user) : null }); return; }
       if (['/api/setup', '/api/login', '/api/join'].includes(route) && method === 'POST') {
         const address = request.socket.remoteAddress;
         const now = Date.now();
@@ -52,12 +55,12 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
         attempts.set(address, entry);
         const input = await body(request), username = normalizeUsername(input.username);
         if (route === '/api/login') {
-          const found = store.read().users.find((entry) => entry.username === username && !entry.disabled);
+          const found = snapshot.users.find((entry) => entry.username === username && !entry.disabled);
           if (!found || !verifyPassword(input.password, found.password)) throw fail(401, 'שם המשתמש או הסיסמה אינם נכונים');
           sessions.create(found.id, response); send(200, safeUser(found)); return;
         }
         const password = hashPassword(input.password), id = randomUUID();
-        const created = store.update((state) => {
+        const created = (await store.update((state) => {
           if (state.users.some((entry) => entry.username === username)) throw fail(409, 'שם המשתמש כבר קיים');
           let staffId;
           if (route === '/api/setup') {
@@ -71,24 +74,24 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
             invitation.used = true;
           }
           state.users.push({ id, username, password, role: route === '/api/setup' ? 'admin' : 'staff', ...(staffId ? { staffId } : {}), disabled: false }); return state;
-        }).users.find((entry) => entry.id === id);
+        })).users.find((entry) => entry.id === id);
         sessions.create(id, response); send(201, safeUser(created)); return;
       }
       if (!user) throw fail(401, 'יש להתחבר כדי להמשיך');
       const admin = () => { if (user.role !== 'admin') throw fail(403, 'פעולה זו מיועדת למנהל בלבד'); };
-      const staff = () => { if (user.role !== 'staff' || !store.read().planner.staff.some((member) => member.id === user.staffId)) throw fail(403, 'החשבון אינו משויך לאיש צוות פעיל'); return user.staffId; };
+      const staff = () => { if (user.role !== 'staff' || !snapshot.planner.staff.some((member) => member.id === user.staffId)) throw fail(403, 'החשבון אינו משויך לאיש צוות פעיל'); return user.staffId; };
       if (route === '/api/logout' && method === 'POST') { sessions.logout(request, response); send(200, {}); return; }
       if (route === '/api/password' && method === 'POST') {
         const input = await body(request); if (!verifyPassword(input.currentPassword, user.password)) throw fail(403, 'הסיסמה הנוכחית אינה נכונה');
-        const password = hashPassword(input.password); store.update((state) => { state.users.find((entry) => entry.id === user.id).password = password; return state; });
+        const password = hashPassword(input.password); await store.update((state) => { state.users.find((entry) => entry.id === user.id).password = password; return state; });
         sessions.revoke(user.id); sessions.create(user.id, response); send(200, {}); return;
       }
       if (route === '/api/planner') {
         admin();
-        if (method === 'GET') { const state = store.read(); send(200, { data: state.planner, revision: state.revision }); return; }
+        if (method === 'GET') { const state = snapshot; send(200, { data: state.planner, revision: state.revision }); return; }
         if (method === 'PUT') {
           const input = await body(request), decoded = decodePlanner(JSON.stringify(input.data));
-          const next = store.update((state) => {
+          const next = await store.update((state) => {
             if (input.revision !== state.revision) throw fail(409, 'הסידור עודכן על ידי משתמש אחר. טענו את הגרסה העדכנית לפני שמירה');
             state.planner = decoded; state.revision += 1;
             state.audit.push({ id: randomUUID(), at: new Date().toISOString(), actor: user.id, action: 'planner-updated' });
@@ -97,10 +100,10 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
           send(200, { revision: next.revision }); return;
         }
       }
-      if (route === '/api/team' && method === 'GET') { admin(); const state = store.read(); send(200, { users: state.users.map(safeUser), requests: state.requests, staff: state.planner.staff, audit: state.audit.slice(-100).reverse() }); return; }
+      if (route === '/api/team' && method === 'GET') { admin(); const state = snapshot; send(200, { users: state.users.map(safeUser), requests: state.requests, staff: state.planner.staff, audit: state.audit.slice(-100).reverse() }); return; }
       if (route === '/api/invitations' && method === 'POST') {
         admin(); const input = await body(request), raw = token();
-        store.update((state) => {
+        await store.update((state) => {
           if (!state.planner.staff.some((member) => member.id === input.staffId)) throw fail(400, 'בחרו איש צוות קיים');
           if (state.users.some((entry) => entry.staffId === input.staffId && !entry.disabled)) throw fail(409, 'כבר קיים חשבון פעיל');
           state.invitations = state.invitations.filter((entry) => entry.staffId !== input.staffId && entry.expires > Date.now() && !entry.used);
@@ -109,38 +112,38 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
       }
       if (route === '/api/users/disable' && method === 'POST') {
         admin(); const input = await body(request);
-        store.update((state) => { const target = state.users.find((entry) => entry.id === input.id); if (!target || target.role === 'admin') throw fail(400, 'לא ניתן להשבית חשבון זה'); target.disabled = true; return state; });
+        await store.update((state) => { const target = state.users.find((entry) => entry.id === input.id); if (!target || target.role === 'admin') throw fail(400, 'לא ניתן להשבית חשבון זה'); target.disabled = true; return state; });
         sessions.revoke(input.id); send(200, {}); return;
       }
-      if (route === '/api/personal' && method === 'GET') { send(200, personalView(store.read(), staff(), url.searchParams.get('start') ?? getDefaultStart())); return; }
+      if (route === '/api/personal' && method === 'GET') { send(200, personalView(snapshot, staff(), url.searchParams.get('start') ?? getDefaultStart())); return; }
       if (route === '/api/availability' && method === 'POST') {
         const staffId = staff(), input = await body(request), note = limitedText(input.note ?? '');
         if (!validDate(input.start) || !validDate(input.end) || input.start > input.end) throw fail(400, 'טווח התאריכים אינו תקין');
-        store.update((state) => { state.planner.unavailability.push({ id: randomUUID(), staffId, start: input.start, end: input.end, note }); state.revision += 1; return state; }); send(201, {}); return;
+        await store.update((state) => { state.planner.unavailability.push({ id: randomUUID(), staffId, start: input.start, end: input.end, note }); state.revision += 1; return state; }); send(201, {}); return;
       }
       if (route === '/api/availability/remove' && method === 'POST') {
         const staffId = staff(), input = await body(request);
-        store.update((state) => { state.planner.unavailability = state.planner.unavailability.filter((entry) => entry.id !== input.id || entry.staffId !== staffId); state.revision += 1; return state; }); send(200, {}); return;
+        await store.update((state) => { state.planner.unavailability = state.planner.unavailability.filter((entry) => entry.id !== input.id || entry.staffId !== staffId); state.revision += 1; return state; }); send(200, {}); return;
       }
       if (route === '/api/requests' && method === 'POST') {
         const staffId = staff(), input = await body(request), note = limitedText(input.note ?? '');
-        store.update((state) => { openSwap(state, staffId, input.start, input.key, note); return state; }); send(201, {}); return;
+        await store.update((state) => { openSwap(state, staffId, input.start, input.key, note); return state; }); send(201, {}); return;
       }
       if (route === '/api/requests/offer' && method === 'POST') {
         const staffId = staff(), input = await body(request);
-        store.update((state) => { offerSwap(state, input.id, staffId); return state; }); send(200, {}); return;
+        await store.update((state) => { offerSwap(state, input.id, staffId); return state; }); send(200, {}); return;
       }
       if (route === '/api/requests/approve' && method === 'POST') {
         admin(); const input = await body(request);
-        store.update((state) => { approveSwap(state, input.id, input.candidateId, user.id); return state; }); send(200, {}); return;
+        await store.update((state) => { approveSwap(state, input.id, input.candidateId, user.id); return state; }); send(200, {}); return;
       }
       if (route === '/api/requests/withdraw' && method === 'POST') {
         const staffId = staff(), input = await body(request);
-        store.update((state) => { const target = state.requests.find((entry) => entry.id === input.id && entry.status === 'open'); if (!target) throw fail(400, 'הבקשה אינה פתוחה'); target.offers = target.offers.filter((id) => id !== staffId); return state; }); send(200, {}); return;
+        await store.update((state) => { const target = state.requests.find((entry) => entry.id === input.id && entry.status === 'open'); if (!target) throw fail(400, 'הבקשה אינה פתוחה'); target.offers = target.offers.filter((id) => id !== staffId); return state; }); send(200, {}); return;
       }
       if (route === '/api/requests/close' && method === 'POST') {
         const input = await body(request);
-        store.update((state) => {
+        await store.update((state) => {
           const target = state.requests.find((entry) => entry.id === input.id && entry.status === 'open');
           if (!target || user.role !== 'admin' && target.requesterId !== user.staffId) throw fail(403, 'לא ניתן לסגור בקשה זו');
           target.status = user.role === 'admin' ? 'rejected' : 'cancelled'; target.resolvedAt = new Date().toISOString(); return state;
@@ -149,5 +152,5 @@ export function createTeamServer({ dataFile, setupToken, secureCookies = false, 
       throw fail(404, 'הפעולה לא נמצאה');
     } catch (error) { send(error.status ?? 400, { error: error.message || 'הפעולה נכשלה' }); }
   });
-  return { server, setupToken: bootstrap, needsSetup: () => store.read().users.length === 0 };
+  return { server, setupToken: bootstrap, needsSetup: async () => (await store.read()).users.length === 0 };
 }
