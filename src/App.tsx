@@ -13,8 +13,10 @@ import { AutoScheduler } from "./components/AutoScheduler";
 import { PublishPanel } from "./components/PublishPanel";
 import { ResidentsPanel } from "./components/ResidentsPanel";
 import { recurringLaundry, setRecurringLaundry } from "./domain/laundry";
+import { usePrintLayout } from "./hooks/usePrintLayout";
 
 function App({ repository }: { repository: PlannerRepository }) {
+  usePrintLayout();
   const {
     data, setData, restore, saveState, saveError, undo, canUndo, undoLabel, loadError,
     newStaffName, setNewStaffName, dialogStaffName, setDialogStaffName,

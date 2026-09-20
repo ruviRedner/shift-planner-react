@@ -38,26 +38,3 @@ body { margin: 0; min-width: 320px; }
   .planner-content { padding: 12px; gap: 12px; }
   .week-note { max-width: none; }
 }
-@media print {
-  @page { size: A4 landscape; margin: 7mm; }
-  body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .no-print, .ant-modal-root, .ant-message, .ant-picker-dropdown { display: none !important; }
-  .planner-content { padding: 0; gap: 2mm; }
-  .planner-layout { min-height: 0; background: white; }
-  .print-only { display: block; }
-  .week-card, .laundry-board { break-inside: avoid; }
-  .week-card .ant-card-head { min-height: 0; padding: 1mm 2mm; }
-  .week-card .ant-card-body { padding: 2mm; }
-  .week-toolbar { margin-bottom: 1mm; }
-  .week-table .ant-table-content { overflow: visible !important; }
-  .week-table table { width: 100% !important; min-width: 0 !important; }
-  .week-table .ant-table-cell { padding: 1mm !important; font-size: 7pt; }
-  .week-table .ant-typography, .week-table .ant-tag { font-size: 7pt; line-height: 1.4; }
-  .week-table .shift-content > .ant-typography { font-size: 11pt; line-height: 1.35; }
-  .week-table .shift-content .ant-tag { font-size: 10pt; }
-  .week-table .ant-table-cell .ant-space { gap: 0 !important; }
-  .shift-button { min-height: 15mm; padding: 1mm; }
-  .laundry-cell { min-height: 0; gap: 1mm; font-size: 9pt; }
-  .shift-content { gap: 1mm !important; }
-  .guide-notice { padding: 1mm 2mm; font-size: 8pt; }
-}
