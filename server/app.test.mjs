@@ -42,6 +42,7 @@ test('public editing permits anonymous planner saves with conflict protection wh
   const f = await fixture(t, true, true);
   f.planner.residents = [{ id: 'resident-one', name: 'דייר לבדיקה' }];
   f.planner.laundry = { [f.start]: ['resident-one'] };
+  f.planner.recurringLaundry = { '0': ['resident-one'], '5': ['resident-one'] };
   const loaded = await f.request('/planner');
   assert.equal(loaded.status, 200);
   assert.equal(loaded.body.users, undefined);
@@ -51,6 +52,7 @@ test('public editing permits anonymous planner saves with conflict protection wh
   const persisted = (await f.request('/planner')).body.data;
   assert.deepEqual(persisted.residents, f.planner.residents);
   assert.deepEqual(persisted.laundry, f.planner.laundry);
+  assert.deepEqual(persisted.recurringLaundry, f.planner.recurringLaundry);
   assert.equal((await f.request('/planner', { data: f.planner, revision: 1 }, undefined, 'PUT')).status, 409);
   assert.equal((await f.request('/team')).status, 401);
   assert.equal((await f.request('/invitations', { staffId: 'a' })).status, 401);

@@ -1,6 +1,7 @@
 import { addDays, assignmentKey, DAYS, formatRange, getShiftsForDay, parseDate, SHIFT_META, shortDateFormatter, toDateKey } from "../domain/planner";
 import type { PlannerData } from "../domain/planner";
 import { publicationReview } from "../domain/publication";
+import { LAUNDRY_DAYS } from "../domain/laundry";
 
 export async function renderScheduleImage(data: PlannerData, draft: boolean): Promise<Blob> {
   await document.fonts.ready;
@@ -25,9 +26,9 @@ export async function renderScheduleImage(data: PlannerData, draft: boolean): Pr
     return 75 + (review.snapshot.assignments[assignmentKey(week, day, shift)] ?? []).reduce((count, name) => count + wrap(name, column - 30).length, 0) * 40;
   }));
   const heights = [0, 1].map((week) => [cellHeight(week, 0), cellHeight(week, 1)]);
-  const laundryColumn = (width - margin * 2) / 14;
+  const laundryColumn = (width - margin * 2) / 6;
   ctx.font = '22px Arial';
-  const laundryHeight = Math.max(115, ...Array.from({ length: 14 }, (_, day) => {
+  const laundryHeight = Math.max(115, ...Array.from({ length: 6 }, (_, day) => {
     const date = toDateKey(addDays(parseDate(data.currentStart), day));
     return 80 + (review.snapshot.laundry?.[date] ?? []).reduce((count, name) => count + wrap(name, laundryColumn - 24).length, 0) * 28;
   }));
@@ -70,16 +71,15 @@ export async function renderScheduleImage(data: PlannerData, draft: boolean): Pr
     }
     y += 35;
   }
-  text('כביסות לשבועיים', width - margin, y, 36, '#17624a', true);
+  text('כביסות קבועות', width - margin, y, 36, '#17624a', true);
   y += 50;
-    for (let day = 0; day < 14; day++) {
+    for (let day = 0; day < 6; day++) {
       const date = toDateKey(addDays(start, day)), x = width - margin - (day + 1) * laundryColumn;
       const changed = review.laundryChanged.includes(date);
       ctx.fillStyle = changed ? '#fff2ca' : '#e8f5f0';
       ctx.fillRect(x + 4, y, laundryColumn - 8, laundryHeight - 8);
-      const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][day % 7];
+      const dayName = LAUNDRY_DAYS[day];
       text(dayName, x + laundryColumn - 12, y + 10, 22, '#17624a', true);
-      text(shortDateFormatter.format(addDays(start, day)), x + laundryColumn - 12, y + 36, 20, '#17624a');
       let nameY = y + 70;
       const names = review.snapshot.laundry?.[date] ?? [];
       for (const name of names.length ? names : ['—']) {

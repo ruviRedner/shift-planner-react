@@ -1,5 +1,21 @@
 import type { PlannerData } from './planner.ts';
 import { addDays, parseDate, toDateKey } from './planner.ts';
+export const LAUNDRY_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי–מוצ״ש'];
+
+export function recurringLaundry(data: PlannerData): Record<string, string[]> {
+  if (data.recurringLaundry) return data.recurringLaundry;
+  const result: Record<string, string[]> = {};
+  for (const [date, ids] of Object.entries(data.laundry ?? {})) {
+    const day = String(Math.min(parseDate(date).getDay(), 5));
+    result[day] = [...new Set([...(result[day] ?? []), ...ids])];
+  }
+  return result;
+}
+
+export function setRecurringLaundry(data: PlannerData, day: string, ids: string[]): PlannerData {
+  const known = new Set((data.residents ?? []).map((resident) => resident.id));
+  return { ...data, recurringLaundry: { ...recurringLaundry(data), [day]: [...new Set(ids)].filter((id) => known.has(id)) } };
+}
 
 export function setLaundry(data: PlannerData, date: string, ids: string[]): PlannerData {
   const known = new Set((data.residents ?? []).map((resident) => resident.id));
@@ -12,6 +28,7 @@ export function setLaundry(data: PlannerData, date: string, ids: string[]): Plan
 
 export function deleteResident(data: PlannerData, id: string): PlannerData {
   return { ...data, residents: (data.residents ?? []).filter((resident) => resident.id !== id),
+    ...(data.recurringLaundry ? { recurringLaundry: Object.fromEntries(Object.entries(data.recurringLaundry).map(([day, ids]) => [day, ids.filter((value) => value !== id)])) } : {}),
     laundry: Object.fromEntries(Object.entries(data.laundry ?? {}).map(([date, ids]): [string, string[]] => [date, ids.filter((value) => value !== id)]).filter(([, ids]) => ids.length)) };
 }
 
@@ -24,5 +41,5 @@ export function clearLaundryPeriod(data: PlannerData): PlannerData {
 
 export function laundryNames(data: PlannerData, date: string): string[] {
   const names = new Map((data.residents ?? []).map((resident) => [resident.id, resident.name]));
-  return (data.laundry?.[date] ?? []).map((id) => names.get(id)).filter((name): name is string => Boolean(name));
+  return (recurringLaundry(data)[String(Math.min(parseDate(date).getDay(), 5))] ?? []).map((id) => names.get(id)).filter((name): name is string => Boolean(name));
 }

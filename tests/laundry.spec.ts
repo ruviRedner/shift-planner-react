@@ -5,7 +5,7 @@ test('residents and daily laundry persist, print, export and support removal und
   await page.getByRole('textbox', { name: 'שם הדייר', exact: true }).fill('דייר לבדיקה');
   await page.getByRole('button', { name: 'הוסף דייר', exact: true }).click();
   await expect(page.locator('.resident-list')).toContainText('דייר לבדיקה');
-  await expect(page.locator('.laundry-cell')).toHaveCount(14);
+  await expect(page.locator('.laundry-cell')).toHaveCount(6);
   await expect(page.locator('.week-card .laundry-cell')).toHaveCount(0);
   await expect(page.locator('.laundry-board')).toHaveCount(1);
   expect(await page.locator('.laundry-board').evaluate((element) => [...document.querySelectorAll('.week-card')].every((week) => Boolean(week.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)))).toBe(true);
@@ -15,6 +15,8 @@ test('residents and daily laundry persist, print, export and support removal und
   await page.keyboard.press('Escape');
   await expect(cell.locator('.ant-select-selection-item')).toContainText('דייר לבדיקה');
   await page.reload();
+  await expect(cell.locator('.ant-select-selection-item')).toContainText('דייר לבדיקה');
+  await page.getByRole('button', { name: /התקופה הבאה/ }).click();
   await expect(cell.locator('.ant-select-selection-item')).toContainText('דייר לבדיקה');
   await page.emulateMedia({ media: 'print' });
   await expect(cell.locator('.print-only')).toBeVisible();

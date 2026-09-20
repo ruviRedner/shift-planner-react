@@ -2,7 +2,6 @@ import { applyRecurringToPeriods, removeMember } from "../assignments.ts";
 import { assignmentKey, createEmptyPeriod, DAYS, getShiftsForDay } from "./planner.ts";
 import type { Period, PlannerData, ShiftType } from "./planner.ts";
 import { synchronizePeriod, visiblePeriod } from "./periods.ts";
-import { clearLaundryPeriod } from "./laundry.ts";
 
 export function updatePeriod(data: PlannerData, update: (period: Period) => Period): PlannerData {
   const before = visiblePeriod(data);
@@ -27,7 +26,7 @@ export function saveRecurring(data: PlannerData, day: number, shift: ShiftType, 
 }
 
 export function clearPeriod(data: PlannerData): PlannerData {
-  return updatePeriod(clearLaundryPeriod(data), () => ({ ...createEmptyPeriod(),
+  return updatePeriod(data, () => ({ ...createEmptyPeriod(),
     assignments: Object.fromEntries([0, 1].flatMap((week) => DAYS.flatMap((_, day) =>
       getShiftsForDay(day).map((shift) => [assignmentKey(week, day, shift), []])))),
   }));

@@ -19,6 +19,7 @@ export type PlannerData = {
   staff: StaffMember[];
   residents?: StaffMember[];
   laundry?: Record<string, string[]>;
+  recurringLaundry?: Record<string, string[]>;
   periods: Record<string, Period>;
   recurring: Record<string, string[]>;
   unavailability: Unavailability[];

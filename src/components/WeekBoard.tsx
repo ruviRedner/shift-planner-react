@@ -61,6 +61,6 @@ export function WeekBoard({ period, periodStart, staff, recurring, unavailabilit
             <Table className="week-table" columns={columns} dataSource={Array.from({ length: rowCount }, (_, key) => ({ key }))} pagination={false} bordered size="small" tableLayout="fixed" scroll={{ x: 1000 }} />
           </Card>;
         })}
-    <LaundryBoard periodStart={periodStart} residents={residents} laundry={laundry} onLaundry={onLaundry} />
+    <LaundryBoard residents={residents} laundry={laundry} onLaundry={onLaundry} />
   </>;
 }

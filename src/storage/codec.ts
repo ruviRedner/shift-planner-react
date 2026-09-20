@@ -102,6 +102,13 @@ export function decodePlanner(raw: string): PlannerData {
       return [date, [...new Set(ids)]];
     }));
   }
+  if (parsed.recurringLaundry !== undefined) {
+    const residents = new Set((result.residents ?? []).map((resident) => resident.id));
+    result.recurringLaundry = Object.fromEntries(Object.entries(object(parsed.recurringLaundry)).map(([day, ids]) => {
+      if (!/^[0-5]$/.test(day) || !Array.isArray(ids) || !ids.every((id) => typeof id === 'string' && residents.has(id))) throw invalid();
+      return [day, [...new Set(ids)]];
+    }));
+  }
   if (parsed.publications !== undefined) result.publications = Object.fromEntries(Object.entries(object(parsed.publications)).map(([date, value]) => {
     sunday(date);
     const publication = object(value);
