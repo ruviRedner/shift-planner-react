@@ -7,6 +7,6 @@ const TeamPortal = lazy(() => import("./team/TeamPortal").then((module) => ({ de
 export function Workspace() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener("hashchange", update); return () => window.removeEventListener("hashchange", update); }, []);
-  if (hash.startsWith("#/team") || hash.startsWith("#/join")) return <Suspense fallback={<Spin />}><TeamPortal /></Suspense>;
+  if (import.meta.env.VITE_SHARED_ONLY === "true" || hash.startsWith("#/team") || hash.startsWith("#/join")) return <Suspense fallback={<Spin />}><TeamPortal /></Suspense>;
   return <><div className="workspace-switch no-print"><Button onClick={() => { window.location.hash = "/team"; }}>אזור הצוות · כניסה לחשבון</Button></div><Planner repository={browserRepository} /></>;
 }

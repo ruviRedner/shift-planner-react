@@ -39,7 +39,7 @@ export function TeamPortal() {
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   return <div className="team-portal">
-    <Space wrap className="team-toolbar no-print"><Button onClick={() => { window.location.hash = ""; }}>חזור לסידור המקומי</Button>{status?.user && <><Typography.Text strong>{status.user.username} · {status.user.role === "admin" ? "מנהל" : "מדריך"}</Typography.Text><Button onClick={() => setPasswordOpen(true)}>שינוי סיסמה</Button><Button onClick={() => { void api("/logout", {}).then(() => { setStatus({ needsSetup: false, user: null }); }); }}>התנתק</Button></>}</Space>
+    <Space wrap className="team-toolbar no-print">{import.meta.env.VITE_SHARED_ONLY !== "true" && <Button onClick={() => { window.location.hash = ""; }}>חזור לסידור המקומי</Button>}{status?.user && <><Typography.Text strong>{status.user.username} · {status.user.role === "admin" ? "מנהל" : "מדריך"}</Typography.Text><Button onClick={() => setPasswordOpen(true)}>שינוי סיסמה</Button><Button onClick={() => { void api("/logout", {}).then(() => { setStatus({ needsSetup: false, user: null }); }); }}>התנתק</Button></>}</Space>
     {error && <Alert type="error" title={error} />}
     {!status?.user ? <Card className="auth-card" title={status?.needsSetup ? "הקמת חשבון מנהל" : joinToken ? "יצירת חשבון מדריך" : "כניסה לאזור הצוות"}>
       <Typography.Paragraph>{status?.needsSetup ? "בהפעלה הראשונה הגדירו חשבון מנהל בעזרת קוד ההתקנה שמופיע בטרמינל של השרת." : "הסידור, הזמינות וההחלפות שלך מסונכרנים בין המכשירים."}</Typography.Paragraph>
