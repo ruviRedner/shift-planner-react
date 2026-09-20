@@ -1,4 +1,5 @@
-import { Button, Card, Flex, Input, Select, Space, Table, Tag, Typography } from "antd";
+import { LaundryBoard } from "./LaundryBoard";
+import { Button, Card, Flex, Input, Space, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { CalendarOutlined, PlusOutlined } from "@ant-design/icons";
 import { getJewishDayInfo, getJewishWeekInfo } from "../jewishCalendar";
@@ -32,21 +33,8 @@ export function WeekBoard({ period, periodStart, staff, recurring, unavailabilit
                 <Typography.Text type="secondary">{shortDateFormatter.format(date)} · {jewishDay.hebrewDate}</Typography.Text>
                 {jewishDay.holidays.length > 0 && <Tag color="gold" style={{ whiteSpace: "normal", margin: 0 }}>{jewishDay.holidays.join(" · ")}</Tag>}
               </Space>,
-              onCell: (row, rowIndex) => ({ rowSpan: row.key === rowCount ? 1 : getShiftsForDay(dayIndex).length === 1 ? rowIndex === 0 ? rowCount : 0 : 1 }),
+              onCell: (_, rowIndex) => ({ rowSpan: getShiftsForDay(dayIndex).length === 1 ? rowIndex === 0 ? rowCount : 0 : 1 }),
               render: (_, row) => {
-                if (row.key === rowCount) {
-                  const dateKey = toDateKey(date), selected = laundry[dateKey] ?? [];
-                  const names = selected.map((id) => residents.find((resident) => resident.id === id)?.name).filter(Boolean);
-                  const laundryDay = dayIndex === 5 ? 'שישי' : dayIndex === 6 ? 'שבת' : dayName;
-                  return <div className="laundry-cell" data-laundry-date={dateKey}>
-                    <Typography.Text strong>כביסות{dayIndex >= 5 ? ` · ${laundryDay}` : ''}</Typography.Text>
-                    <Select mode="multiple" className="no-print" style={{ width: '100%' }} aria-label={`כביסות ${laundryDay} ${shortDateFormatter.format(date)}`}
-                      value={selected} options={residents.map((resident) => ({ value: resident.id, label: resident.name }))}
-                      optionFilterProp="label" placeholder={residents.length ? 'בחרו דיירים' : 'הוסיפו דיירים למעלה'}
-                      disabled={!residents.length} onChange={(ids) => onLaundry(dateKey, ids)} allowClear />
-                    <span className="print-only">{names.join(', ') || '—'}</span>
-                  </div>;
-                }
                 const shiftType = getShiftsForDay(dayIndex)[row.key];
                 if (!shiftType) return null;
                 const meta = SHIFT_META[shiftType];
@@ -70,8 +58,9 @@ export function WeekBoard({ period, periodStart, staff, recurring, unavailabilit
               <Input className="week-note no-print" aria-label={`הערה לשבוע ${weekIndex + 1}`} placeholder="הערה לשבוע" maxLength={80} value={period.weekNotes[weekIndex]} onChange={(event) => updateWeekNote(weekIndex, event.target.value)} />
               {period.weekNotes[weekIndex] && <Typography.Text className="print-only">{period.weekNotes[weekIndex]}</Typography.Text>}
             </Flex>
-            <Table className="week-table" columns={columns} dataSource={Array.from({ length: rowCount + 1 }, (_, key) => ({ key }))} pagination={false} bordered size="small" tableLayout="fixed" scroll={{ x: 1000 }} />
+            <Table className="week-table" columns={columns} dataSource={Array.from({ length: rowCount }, (_, key) => ({ key }))} pagination={false} bordered size="small" tableLayout="fixed" scroll={{ x: 1000 }} />
           </Card>;
         })}
+    <LaundryBoard periodStart={periodStart} residents={residents} laundry={laundry} onLaundry={onLaundry} />
   </>;
 }

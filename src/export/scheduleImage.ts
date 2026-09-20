@@ -25,11 +25,13 @@ export async function renderScheduleImage(data: PlannerData, draft: boolean): Pr
     return 75 + (review.snapshot.assignments[assignmentKey(week, day, shift)] ?? []).reduce((count, name) => count + wrap(name, column - 30).length, 0) * 40;
   }));
   const heights = [0, 1].map((week) => [cellHeight(week, 0), cellHeight(week, 1)]);
-  const laundryHeights = [0, 1].map((week) => Math.max(110, ...Array.from({ length: 7 }, (_, day) => {
-    const date = toDateKey(addDays(parseDate(data.currentStart), week * 7 + day));
-    return 60 + (review.snapshot.laundry?.[date] ?? []).reduce((count, name) => count + wrap(name, column - 30).length, 0) * 40;
-  })));
-  canvas.width = width; canvas.height = 270 + heights.flat().reduce((a, b) => a + b, 0) + laundryHeights.reduce((a, b) => a + b, 0) + 360;
+  const laundryColumn = (width - margin * 2) / 14;
+  ctx.font = '22px Arial';
+  const laundryHeight = Math.max(115, ...Array.from({ length: 14 }, (_, day) => {
+    const date = toDateKey(addDays(parseDate(data.currentStart), day));
+    return 80 + (review.snapshot.laundry?.[date] ?? []).reduce((count, name) => count + wrap(name, laundryColumn - 24).length, 0) * 28;
+  }));
+  canvas.width = width; canvas.height = 270 + heights.flat().reduce((a, b) => a + b, 0) + laundryHeight + 420;
   ctx.fillStyle = "#f1f5fb"; ctx.fillRect(0, 0, width, canvas.height);
   ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "top";
   const text = (value: string, x: number, y: number, size = 30, color = "#172b4d", bold = false) => {
@@ -66,21 +68,26 @@ export async function renderScheduleImage(data: PlannerData, draft: boolean): Pr
       }
       y += heights[week][row];
     }
-    for (let day = 0; day < 7; day++) {
-      const date = toDateKey(addDays(start, week * 7 + day)), x = width - margin - (day + 1) * column;
+    y += 35;
+  }
+  text('כביסות לשבועיים', width - margin, y, 36, '#17624a', true);
+  y += 50;
+    for (let day = 0; day < 14; day++) {
+      const date = toDateKey(addDays(start, day)), x = width - margin - (day + 1) * laundryColumn;
       const changed = review.laundryChanged.includes(date);
       ctx.fillStyle = changed ? '#fff2ca' : '#e8f5f0';
-      ctx.fillRect(x + 4, y, column - 8, laundryHeights[week] - 8);
-      text(`כביסות${day === 5 ? ' · שישי' : day === 6 ? ' · שבת' : ''}`, x + column - 20, y + 14, 24, '#17624a', true);
-      let nameY = y + 55;
+      ctx.fillRect(x + 4, y, laundryColumn - 8, laundryHeight - 8);
+      const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][day % 7];
+      text(dayName, x + laundryColumn - 12, y + 10, 22, '#17624a', true);
+      text(shortDateFormatter.format(addDays(start, day)), x + laundryColumn - 12, y + 36, 20, '#17624a');
+      let nameY = y + 70;
       const names = review.snapshot.laundry?.[date] ?? [];
       for (const name of names.length ? names : ['—']) {
-        ctx.font = '30px Arial';
-        for (const line of wrap(name, column - 30)) { text(line, x + column - 20, nameY); nameY += 40; }
+        ctx.font = '22px Arial';
+        for (const line of wrap(name, laundryColumn - 24)) { text(line, x + laundryColumn - 12, nameY, 22); nameY += 28; }
       }
     }
-    y += laundryHeights[week] + 35;
-  }
+  y += laundryHeight + 35;
   text(`נוצר ב־${new Date().toLocaleString("he-IL")} · סימון צהוב: שינוי מהגרסה הקודמת`, width - margin, y, 24, "#52647a");
   if (draft) text(`${review.empty.length} משמרות ריקות · ${review.conflicts.length} התנגשויות זמינות`, width - margin, y + 36, 24, "#9c4c00");
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("יצירת התמונה נכשלה")), "image/png"));

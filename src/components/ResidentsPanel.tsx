@@ -24,7 +24,7 @@ export function ResidentsPanel({ data, onChange }: { data: PlannerData; onChange
       <Button type="primary" htmlType="submit" disabled={!name.trim()}>הוסף דייר</Button>
     </Space.Compact></Form>
     <Flex gap="small" wrap className="resident-list">
-      {residents.length === 0 && <Typography.Text type="secondary">הוסיפו את שמות הדיירים ובחרו למי עושים כביסה בשורה שמתחת לכל שבוע.</Typography.Text>}
+      {residents.length === 0 && <Typography.Text type="secondary">הוסיפו את שמות הדיירים ובחרו למי עושים כביסה בשורה שמתחת לסידור השבועיים.</Typography.Text>}
       {residents.map((resident) => <Tag key={resident.id} closable onClose={(event) => {
         event.preventDefault();
         void (async () => {
