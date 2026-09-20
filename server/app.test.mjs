@@ -7,7 +7,7 @@ import { createTeamServer } from './app.mjs';
 import { createTeamStore } from './store.mjs';
 import { makeInitialData, addDays, startOfSunday, toDateKey } from '../src/domain/planner.ts';
 
-async function fixture(t, asynchronous = false) {
+async function fixture(t, asynchronous = false, publicEditing = false) {
   const directory = mkdtempSync(join(tmpdir(), 'planner-test-'));
   const file = join(directory, 'team.json');
   const backing = createTeamStore(file);
@@ -20,7 +20,7 @@ async function fixture(t, asynchronous = false) {
       return backing.update(transform);
     },
   } : undefined;
-  const app = createTeamServer({ store, dataFile: file, setupToken: 'test-setup-code' });
+  const app = createTeamServer({ store, publicEditing, dataFile: file, setupToken: 'test-setup-code' });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${app.server.address().port}`;
   t.after(async () => { await new Promise((resolve) => app.server.close(resolve));
@@ -37,6 +37,20 @@ async function fixture(t, asynchronous = false) {
   async function invite(id, username) { const invitation = await request('/invitations', { staffId: id }, admin.cookie); return request('/join', { token: invitation.body.token, username, password: 'strong-test-password' }); }
   return { request, admin, planner, start, invite, file, base, writes };
 }
+
+test('public editing permits anonymous planner saves with conflict protection while accounts stay private', async (t) => {
+  const f = await fixture(t, true, true);
+  const loaded = await f.request('/planner');
+  assert.equal(loaded.status, 200);
+  assert.equal(loaded.body.users, undefined);
+  const result = await f.request('/planner', { data: f.planner, revision: loaded.body.revision }, undefined, 'PUT');
+  assert.equal(result.status, 200);
+  assert.equal((await f.request('/planner')).body.revision, 2);
+  assert.equal((await f.request('/planner', { data: f.planner, revision: 1 }, undefined, 'PUT')).status, 409);
+  assert.equal((await f.request('/team')).status, 401);
+  assert.equal((await f.request('/invitations', { staffId: 'a' })).status, 401);
+  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).audit.at(-1).actor, 'public');
+});
 
 test('async storage commits before success and reports failed saves without changing data', async (t) => {
   const f = await fixture(t, true);

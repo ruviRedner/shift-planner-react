@@ -17,6 +17,10 @@ services:
         value: "1"
       - key: VITE_SHARED_ONLY
         value: "true"
+      - key: VITE_PUBLIC_EDITING
+        value: "true"
+      - key: PUBLIC_EDITING
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: PLANNER_SETUP_TOKEN

@@ -18,7 +18,7 @@ async function body(request) {
 function limitedText(value, limit = 200) { if (typeof value !== 'string' || value.length > limit) throw fail(400, 'טקסט לא תקין'); return value.trim(); }
 const safeUser = ({ id, username, role, staffId, disabled }) => ({ id, username, role, staffId, disabled });
 
-export function createTeamServer({ dataFile, store: suppliedStore, setupToken, secureCookies = false, dist = resolve('dist'), appOrigin } = {}) {
+export function createTeamServer({ dataFile, store: suppliedStore, publicEditing = false, setupToken, secureCookies = false, dist = resolve('dist'), appOrigin } = {}) {
   const store = suppliedStore ?? createTeamStore(dataFile ?? resolve('.planner-data/team.json'));
   const sessions = createSessions(secureCookies), attempts = new Map();
   const bootstrap = setupToken ?? token();
@@ -77,6 +77,23 @@ export function createTeamServer({ dataFile, store: suppliedStore, setupToken, s
         })).users.find((entry) => entry.id === id);
         sessions.create(id, response); send(201, safeUser(created)); return;
       }
+      if (route === '/api/planner') {
+        if (!publicEditing) {
+          if (!user) throw fail(401, 'יש להתחבר כדי להמשיך');
+          if (user.role !== 'admin') throw fail(403, 'פעולה זו מיועדת למנהל בלבד');
+        }
+        if (method === 'GET') { const state = snapshot; send(200, { data: state.planner, revision: state.revision }); return; }
+        if (method === 'PUT') {
+          const input = await body(request), decoded = decodePlanner(JSON.stringify(input.data));
+          const next = await store.update((state) => {
+            if (input.revision !== state.revision) throw fail(409, 'הסידור עודכן על ידי משתמש אחר. טענו את הגרסה העדכנית לפני שמירה');
+            state.planner = decoded; state.revision += 1;
+            state.audit.push({ id: randomUUID(), at: new Date().toISOString(), actor: user?.id ?? 'public', action: 'planner-updated' });
+            state.audit = state.audit.slice(-500); return state;
+          });
+          send(200, { revision: next.revision }); return;
+        }
+      }
       if (!user) throw fail(401, 'יש להתחבר כדי להמשיך');
       const admin = () => { if (user.role !== 'admin') throw fail(403, 'פעולה זו מיועדת למנהל בלבד'); };
       const staff = () => { if (user.role !== 'staff' || !snapshot.planner.staff.some((member) => member.id === user.staffId)) throw fail(403, 'החשבון אינו משויך לאיש צוות פעיל'); return user.staffId; };
@@ -85,20 +102,6 @@ export function createTeamServer({ dataFile, store: suppliedStore, setupToken, s
         const input = await body(request); if (!verifyPassword(input.currentPassword, user.password)) throw fail(403, 'הסיסמה הנוכחית אינה נכונה');
         const password = hashPassword(input.password); await store.update((state) => { state.users.find((entry) => entry.id === user.id).password = password; return state; });
         sessions.revoke(user.id); sessions.create(user.id, response); send(200, {}); return;
-      }
-      if (route === '/api/planner') {
-        admin();
-        if (method === 'GET') { const state = snapshot; send(200, { data: state.planner, revision: state.revision }); return; }
-        if (method === 'PUT') {
-          const input = await body(request), decoded = decodePlanner(JSON.stringify(input.data));
-          const next = await store.update((state) => {
-            if (input.revision !== state.revision) throw fail(409, 'הסידור עודכן על ידי משתמש אחר. טענו את הגרסה העדכנית לפני שמירה');
-            state.planner = decoded; state.revision += 1;
-            state.audit.push({ id: randomUUID(), at: new Date().toISOString(), actor: user.id, action: 'planner-updated' });
-            state.audit = state.audit.slice(-500); return state;
-          });
-          send(200, { revision: next.revision }); return;
-        }
       }
       if (route === '/api/team' && method === 'GET') { admin(); const state = snapshot; send(200, { users: state.users.map(safeUser), requests: state.requests, staff: state.planner.staff, audit: state.audit.slice(-100).reverse() }); return; }
       if (route === '/api/invitations' && method === 'POST') {
